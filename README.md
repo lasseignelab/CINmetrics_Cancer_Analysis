@@ -1,2 +1,2 @@
 # CINmetrics_Cancer_Analysis
-Comparing chromosomal instability metrics from the 
+Analyzing chromosomal instability metrics from the CINmetrics package applied to TCGA data
