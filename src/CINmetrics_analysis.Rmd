@@ -1,0 +1,411 @@
+---
+title: "CINmetrics analysis"
+author: "Sasha Thalluri"
+date: "8/23/2021"
+output: html_document
+---
+
+This R Markdown will have the analysis to compare the CINmetrics to one another across the 33 cancers in TCGA. The output of this document will include corr plots, heatmaps, ridgeline plots, and strip chart.
+
+```{r}
+### Title: Master File for CIN Metrics Visualizations
+### Written by: Roshan Darji
+### Date: 2018.09.28
+### Goal: Create visualizations for CIN metrics
+### Adapted from masterCIN.R
+
+##### Packages #####
+library(tidyverse)
+suppressPackageStartupMessages(library(data.table))
+
+##### Initial data #####
+load("cin-metrics/data/master/190318_cin-metrics-master_calcs_tcga.df.RData")
+load("cin-metrics/data/master/190318_cin-metrics-master_stats.RData")
+
+##### Ridgeline Plots #####
+pdf(file = "cin-metrics/graphs/190318_cin-metrics-master_graphs_ridgeline.pdf",
+    width = 13, height = 8)
+### numBases
+tcga.df$Project <- factor(tcga.df$Project, levels = levels(gdata::reorder.factor(tcga.df[`Sample Type` == "Primary Solid Tumor" | `Sample Type` == "Primary Blood Derived Cancer"]$Project,
+                                                                                 tcga.df[`Sample Type` == "Primary Solid Tumor" | `Sample Type` == "Primary Blood Derived Cancer"]$numBases.3,
+                                                                                 median)))
+ggplot(tcga.df,
+       aes(x = numBases.3,
+           #y = reorder(tcga.df$Project, tcga.df$numBases.3, FUN = median),
+           y = Project,
+           fill = ifelse(`Sample Type` %in% c("Solid Tissue Normal", "Blood Derived Normal"), "Normal", "Tumor"))) +
+  ggridges::geom_density_ridges(rel_min_height = 0.02, scale = 1.5, alpha = 0.8) +
+  #facet_grid(`Sample Type` ~ .) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(size = 16),
+        axis.title.x = element_text(size = 16),
+        axis.text.y = element_text(size = 12)) +
+  scale_x_continuous(trans = "log1p", breaks = c(0, 1e3, 1e6, 1e9, 1e12)) +
+  #scale_x_sqrt() +
+  coord_cartesian(xlim = c(1e3,1e10)) +
+  xlab("\nNumber of Bases") +
+  ylab("") +
+  #ggtitle(label = "Distributions of the Number of Bases in TCGA Projects") +
+  guides(fill = guide_legend(title = NULL, reverse = FALSE))
+
+### numBreakPoints
+tcga.df$Project <- factor(tcga.df$Project, levels = levels(gdata::reorder.factor(tcga.df[`Sample Type` == "Primary Solid Tumor" | `Sample Type` == "Primary Blood Derived Cancer"]$Project,
+                                                                                 tcga.df[`Sample Type` == "Primary Solid Tumor" | `Sample Type` == "Primary Blood Derived Cancer"]$numBreakPoints.3,
+                                                                                 median)))
+ggplot(tcga.df, aes(x = numBreakPoints.3,
+                    #y = reorder(tcga.df$Project, tcga.df$numBreakPoints.3, FUN = median),
+                    y = Project,
+                    fill = ifelse(`Sample Type` %in% c("Solid Tissue Normal", "Blood Derived Normal"), "Normal", "Tumor"))) +
+  ggridges::geom_density_ridges(rel_min_height = 0.02, scale = 1.5, alpha = 0.8) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(size = 16),
+        axis.title.x = element_text(size = 16),
+        axis.text.y = element_text(size = 12)) +
+  scale_x_continuous(trans = "log1p", breaks = c(0, 10, 100, 1000, 10000)) +
+  #scale_x_log10() +
+  xlab("\nNumber of Break Points") +
+  ylab("") +
+  #ggtitle(label = "Distributions of the Number of Break Points in TCGA Projects") +
+  guides(fill = guide_legend(title = NULL, reverse = TRUE))
+
+### tai
+# temporary object to correctly reorder this plot
+tmp <- tcga.df[!is.na(tai.3)]
+tmp$Project <- factor(tmp$Project, levels = levels(gdata::reorder.factor(tmp[`Sample Type` == "Primary Solid Tumor" | `Sample Type` == "Primary Blood Derived Cancer"]$Project,
+                                                                         tmp[`Sample Type` == "Primary Solid Tumor" | `Sample Type` == "Primary Blood Derived Cancer"]$tai.3,
+                                                                         median)))
+ggplot(tmp, aes(x = tai.3,
+                #y = reorder(tcga.df$Project, tcga.df$tai.3, FUN = median),
+                y = Project,
+                fill = ifelse(`Sample Type` %in% c("Solid Tissue Normal", "Blood Derived Normal"), "Normal", "Tumor"))) +
+  ggridges::geom_density_ridges(rel_min_height = 0.02, scale = 1.5, alpha = 0.8) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(size = 16),
+        axis.title.x = element_text(size = 16),
+        axis.text.y = element_text(size = 12)) +
+  #scale_x_continuous(trans = "log1p", breaks = c(0, 1, 2, 3)) +
+  #scale_x_sqrt() +
+  coord_cartesian(xlim = c(0,3.5)) +
+  xlab("\nTotal Aberration Index Score") +
+  ylab("") +
+  #ggtitle(label = "Distributions of Total Aberration Index Score in TCGA Projects") +
+  guides(fill = guide_legend(title = NULL, reverse = TRUE))
+rm(tmp)
+
+### mod.tai
+# temporary object to correctly reorder this plot
+tmp <- tcga.df[!is.na(mod.tai.3)]
+tmp$Project <- factor(tmp$Project, levels = levels(gdata::reorder.factor(tmp[`Sample Type` == "Primary Solid Tumor" | `Sample Type` == "Primary Blood Derived Cancer"]$Project,
+                                                                         tmp[`Sample Type` == "Primary Solid Tumor" | `Sample Type` == "Primary Blood Derived Cancer"]$mod.tai.3,
+                                                                         median)))
+ggplot(tmp, aes(x = mod.tai.3,
+                #y = reorder(tcga.df$Project, tcga.df$tai.3, FUN = median),
+                y = Project,
+                fill = ifelse(`Sample Type` %in% c("Solid Tissue Normal", "Blood Derived Normal"), "Normal", "Tumor"))) +
+  ggridges::geom_density_ridges(rel_min_height = 0.02, scale = 1.5, alpha = 0.8) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(size = 16),
+        axis.title.x = element_text(size = 16),
+        axis.text.y = element_text(size = 12)) +
+  #scale_x_continuous(trans = "log1p", breaks = c(-1e-1, -1e-3, 0 , 1e-3, 1e-1)) +
+  scale_x_sqrt() +
+  #coord_cartesian(xlim = c(-0.025,0.03)) +
+  xlab("\nTotal Aberration Index Score") +
+  ylab("") +
+  #ggtitle(label = "Distributions of Total Aberration Index Score in TCGA Projects") +
+  guides(fill = guide_legend(title = NULL, reverse = TRUE))
+rm(tmp)
+
+### fga
+tcga.df$Project <- factor(tcga.df$Project, levels = levels(gdata::reorder.factor(tcga.df[`Sample Type` == "Primary Solid Tumor" | `Sample Type` == "Primary Blood Derived Cancer"]$Project,
+                                                                                 tcga.df[`Sample Type` == "Primary Solid Tumor" | `Sample Type` == "Primary Blood Derived Cancer"]$fga.3,
+                                                                                 median)))
+ggplot(tcga.df, aes(x = (fga.3 + 1e-12),
+                    #y = reorder(tcga.df$Project, tcga.df$fga.3, FUN = median),
+                    y = Project,
+                    fill = ifelse(`Sample Type` %in% c("Solid Tissue Normal", "Blood Derived Normal"), "Normal", "Tumor"))) +
+  ggridges::geom_density_ridges(rel_min_height = 0.02, scale = 1.5, alpha = 0.8) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(size = 16),
+        axis.title.x = element_text(size = 16),
+        axis.text.y = element_text(size = 12)) +
+  #scale_x_continuous(trans = "log1p", breaks = c(1e-7, 1e-6, 1e-5, 1e-4, 1e-3, 1e-2, 1e-1, 1)) +
+  #scale_x_sqrt() +
+  scale_x_log10(na.value = NULL) +
+  coord_cartesian(xlim = c(1e-7,1.2)) +
+  xlab("\nFraction of the Genome Altered") +
+  ylab("") +
+  #ggtitle(label = "Distributions of Fraction Genome Altered in TCGA Projects") +
+  guides(fill = guide_legend(title = NULL, reverse = TRUE))
+
+### cna
+tcga.df$Project <- factor(tcga.df$Project, levels = levels(gdata::reorder.factor(tcga.df[`Sample Type` == "Primary Solid Tumor" | `Sample Type` == "Primary Blood Derived Cancer"]$Project,
+                                                                                 tcga.df[`Sample Type` == "Primary Solid Tumor" | `Sample Type` == "Primary Blood Derived Cancer"]$cna.3,
+                                                                                 median)))
+ggplot(tcga.df, aes(x = cna.3,
+                    #y = reorder(tcga.df$Project, tcga.df$cna.3, FUN = median),
+                    y = Project,
+                    fill = ifelse(`Sample Type` %in% c("Solid Tissue Normal", "Blood Derived Normal"), "Normal", "Tumor"))) +
+  ggridges::geom_density_ridges(rel_min_height = 0.04, scale = 1.5, alpha = 0.8) +
+  #facet_grid(rows = vars(tcga.df$`Sample Type`)) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(size = 16),
+        axis.title.x = element_text(size = 16),
+        axis.text.y = element_text(size = 12)) +
+  scale_x_continuous(trans = "log1p", breaks = c(0, 10, 100, 1000)) +
+  coord_cartesian(xlim = c(0,1500)) +
+  #scale_x_log10() +
+  xlab("\nNumber of Copy Number Aberrations") +
+  ylab("") +
+  #ggtitle(label = "Distributions of the Number of Copy Number Aberrations") +
+  guides(fill = guide_legend(title = NULL, reverse = TRUE))
+
+dev.off()
+
+##### Corrplots #####
+pdf(file = "cin-metrics/graphs/190318_cin-metrics-master_graphs_corrplot.pdf",
+    width = 13, height = 8)
+### Spearman's correlation for ALL samples
+corrplot::corrplot(corr = spear,
+                   method = "shade", #type = "upper",
+                   title = "TCGA Spearman Correlation Matrix", outline = FALSE,
+                   order = "hclust", sig.level = 0.05,
+                   insig = "blank", mar = c(1,0,3,2))
+### Spearman's correlation for Tumor samples
+corrplot::corrplot(corr = spear.tumor,
+                   method = "shade", #type = "upper",
+                   title = "TCGA Spearman Correlation Matrix for Tumor Samples", outline = FALSE,
+                   order = "hclust", sig.level = 0.05,
+                   insig = "blank", mar = c(1,0,3,2))
+### Spearman's Correlation for Normal samples
+corrplot::corrplot(corr = spear.normal,
+                   method = "shade", #type = "upper",
+                   title = "TCGA Spearman Correlation Matrix for Normal Samples", outline = FALSE,
+                   order = "hclust", sig.level = 0.05,
+                   insig = "blank", mar = c(1,0,3,2))
+dev.off()
+
+##### CIN Metric Correlation Heatmap #####
+pdf(file = "cin-metrics/graphs/190320_cin-metrics-master_graphs_cin-heatmaps.pdf",
+    width = 8, height = 11)
+### Renaming column names of spear.tcga, spear.tumor.tcga, and spear.normal.tcga
+colnames(spear.tcga) <- c("Bases vs Bases", "Break Points vs Bases", "TAI vs Bases", "Mod TAI vs Bases", "FGA vs Bases", "CNA vs Bases",
+                          "Break Points vs Bases", "Break Points vs Break Points", "TAI vs Break Points", "Mod TAI vs Break Points", "FGA vs Break Points", "CNA vs Break Points",
+                          "Bases vs TAI", "Break Points vs TAI", "TAI vs TAI", "Mod TAI vs TAI", "FGA vs TAI", "CNA vs TAI",
+                          "Bases vs Mod TAI", "Break Points vs Mod TAI", "TAI vs Mod TAI", "Mod TAI vs Mod TAI", "FGA vs Mod TAI", "CNA vs Mod TAI",
+                          "Bases vs FGA", "Break Points vs FGA", "TAI vs FGA", "Mod TAI vs FGA", "FGA vs FGA", "CNA vs FGA",
+                          "Bases vs CNA", "Break Points vs CNA", "TAI vs CNA", "Mod TAI vs CNA", "FGA vs CNA", "CNA vs CNA")
+colnames(spear.tumor.tcga) <- colnames(spear.tcga); colnames(spear.normal.tcga) <- colnames(spear.tcga) 
+
+### All samples
+gplots::heatmap.2(as.matrix(na.omit(spear.tcga[, -c(1, 5, 7, 8, 12, 13:15, 19:22, 25:29, 31:36)])),
+                  col = viridis::cividis, na.color = "grey", breaks = seq(-1,1, length.out = 31), symbreaks = TRUE,
+                  dendrogram = "row", density.info = "density",
+                  srtCol = 45,
+                  main = "Spearman's Corrleation \nbetween CIN Metrics in TCGA",
+                  key.xlab = "Spearman's Rho",
+                  key.ylab = NA, key.title = NA, keysize = 1,
+                  #cexCol = 1.5, cexRow = 1.3,
+                  offsetCol = 1, margins = c(13,5), trace = "none")
+
+
+### Tumor samples
+gplots::heatmap.2(as.matrix(na.omit(spear.tumor.tcga[, -c(1, 5, 7, 8, 12, 13:15, 19:22, 25:29, 31:36)])),
+                  col = viridis::cividis, na.color = "grey", breaks = seq(-1,1, length.out = 31), symbreaks = TRUE,
+                  dendrogram = "row", density.info = "density",
+                  srtCol = 45,
+                  main = "Spearman's Corrleation \nbetween CIN Metrics in TCGA Tumor Samples",
+                  key.xlab = "Spearman's Rho",
+                  key.ylab = NA, key.title = NA, keysize = 1,
+                  #cexCol = 1.5, cexRow = 1.3,
+                  offsetCol = 1, margins = c(13,5), trace = "none")
+
+### Normal Samples
+gplots::heatmap.2(as.matrix(na.omit(spear.normal.tcga[, -c(1, 5, 7, 8, 12, 13:15, 19:22, 25:29, 31:36)])),
+                  col = viridis::cividis, na.color = "grey", breaks = seq(-1,1, length.out = 31), symbreaks = TRUE,
+                  dendrogram = "row", density.info = "density",
+                  srtCol = 45,
+                  main = "Spearman's Corrleation \nbetween CIN Metrics in TCGA Normal Samples",
+                  key.xlab = "Spearman's Rho",
+                  key.ylab = NA, key.title = NA, keysize = 1,
+                  #cexCol = 1.5, cexRow = 1.3,
+                  offsetCol = 1, margins = c(13,5), trace = "none")
+dev.off()
+
+##### numBases Scatter Plots #####
+# numBases vs numBreakPoints
+ggplot(tcga.df,
+       aes(y = numBases.3, x = numBreakPoints.3,
+           color = ifelse(`Sample Type` %in% c("Solid Tissue Normal", "Blood Derived Normal"), "Normal", "Tumor"))) +
+  geom_point(alpha = 0.7, size = 2) +
+  #geom_smooth(method = "lm", se = FALSE, size = 0.5) +
+  #theme_minimal() +
+  #scale_y_continuous(trans = "log1p", breaks = c(0, 1e3, 1e6, 1e9)) +
+  scale_x_continuous(trans = "log1p", breaks = c(0, 10, 100, 1000, 10000)) +
+  coord_cartesian(xlim = c(0, 10000), ylim = c(0,5e9)) +
+  labs(y = "Number of Bases",
+       x = "Number of Break Points") +
+  #ggtitle(label = "Number of Bases vs Number of Break Points") +
+  labs(color = NULL) +
+  guides(color = FALSE)#guide_legend(override.aes = list(alpha = 1, size = 2)))
+
+# numBases vs. tai
+ggplot(tcga.df,
+       aes(y = numBases.3, x = tai.3,
+           color = ifelse(`Sample Type` %in% c("Solid Tissue Normal", "Blood Derived Normal"), "Normal", "Tumor"))) +
+  geom_point(alpha = 0.3, size = 2) +
+  theme_minimal() +
+  scale_y_continuous(trans = "log1p", breaks = c(0, 1e3, 1e6, 1e9)) +
+  #scale_y_continuous(trans = "log1p", breaks = c(0, 10, 100, 1000, 10000)) +
+  labs(ylab("Number of Bases")) +
+  labs(xlab("Total Aberration Index Score")) +
+  ggtitle(label = "Number of Bases vs Total Aberration Index") +
+  labs(color = NULL) +
+  guides(color = guide_legend(override.aes = list(alpha = 1)))
+
+# numBases vs. mod.tai
+ggplot(tcga.df,
+       aes(y = numBases.3, x = mod.tai.3,
+           color = ifelse(`Sample Type` %in% c("Solid Tissue Normal", "Blood Derived Normal"), "Normal", "Tumor"))) +
+  geom_point(alpha = 0.3, size = 2) +
+  theme_minimal() +
+  scale_y_continuous(trans = "log1p", breaks = c(0, 1e3, 1e6, 1e9)) +
+  #scale_y_continuous(trans = "log1p", breaks = c(0, 10, 100, 1000, 10000)) +
+  labs(ylab("Number of Bases")) +
+  labs(xlab("Modified Total Aberration Index Score")) +
+  ggtitle(label = "Number of Bases vs Modified Total Aberration Index") +
+  labs(color = NULL) +
+  guides(color = guide_legend(override.aes = list(alpha = 1)))
+
+# numBases vs fga
+ggplot(tcga.df,
+       aes(y = numBases.3, x = fga.3,
+           color = ifelse(`Sample Type` %in% c("Solid Tissue Normal", "Blood Derived Normal"), "Normal", "Tumor"))) +
+  geom_point(alpha = 0.3, size = 2) +
+  theme_minimal() +
+  scale_y_continuous(trans = "log1p", breaks = c(0, 1e3, 1e6, 1e9)) +
+  scale_x_log10() +
+  #scale_y_continuous(trans = "log1p", breaks = c(0, 10, 100, 1000, 10000)) +
+  labs(ylab("Number of Bases")) +
+  labs(xlab("Fraction Genome Altered")) +
+  ggtitle(label = "Number of Bases vs Fraction Genome Altered") +
+  labs(color = NULL) +
+  guides(color = guide_legend(override.aes = list(alpha = 1)))
+
+# numBases vs. cna
+ggplot(tcga.df,
+       aes(y = numBases.3, x = cna.3,
+           color = ifelse(`Sample Type` %in% c("Solid Tissue Normal", "Blood Derived Normal"), "Normal", "Tumor"))) +
+  geom_point(alpha = 0.3, size = 2) +
+  theme_minimal() +
+  scale_y_continuous(trans = "log1p", breaks = c(0, 1e3, 1e6, 1e9)) +
+  scale_x_continuous(trans = "log1p", breaks = c(0, 10, 100, 1000, 10000)) +
+  labs(ylab("Number of Bases")) +
+  labs(xlab("Number of Break Points")) +
+  ggtitle(label = "Number of Bases vs Number of Copy Number Aberrations") +
+  labs(color = NULL) +
+  guides(color = guide_legend(override.aes = list(alpha = 1)))
+
+##### numBreakPoints Scatter Plots #####
+# numBreakPoints vs tai
+ggplot(tcga.df,
+       aes(y = numBreakPoints.3, x = tai.3,
+           color = ifelse(`Sample Type` %in% c("Solid Tissue Normal", "Blood Derived Normal"), "Normal", "Tumor"))) +
+  geom_point(alpha = 0.3, size = 2) +
+  theme_minimal() +
+  scale_y_continuous(trans = "log1p", breaks = c(0, 10, 100, 1000, 10000)) +
+  #scale_y_continuous(trans = "log1p", breaks = c(0, 10, 100, 1000, 10000)) +
+  labs(ylab("Number of Break Points")) +
+  labs(xlab("Total Aberration Index Score")) +
+  ggtitle(label = "Number of Break Points vs Total Aberration Index") +
+  labs(color = NULL) +
+  guides(color = guide_legend(override.aes = list(alpha = 1)))
+
+# numBreakPoints vs mod.tai
+ggplot(tcga.df,
+       aes(y = numBreakPoints.3, x = mod.tai.3,
+           color = ifelse(`Sample Type` %in% c("Solid Tissue Normal", "Blood Derived Normal"), "Normal", "Tumor"))) +
+  geom_point(alpha = 0.3, size = 2) +
+  theme_minimal() +
+  scale_y_continuous(trans = "log1p", breaks = c(0, 10, 100, 1000, 10000)) +
+  scale_x_log10() +
+  #scale_y_continuous(trans = "log1p", breaks = c(0, 10, 100, 1000, 10000)) +
+  labs(ylab("Number of Break Points")) +
+  labs(xlab("Modified Total Aberration Index Score")) +
+  ggtitle(label = "Number of Break Points vs Modified Total Aberration Index") +
+  labs(color = NULL) +
+  guides(color = guide_legend(override.aes = list(alpha = 1)))
+
+# numBreakPoints vs fga
+ggplot(tcga.df,
+       aes(y = numBreakPoints.3, x = fga.3,
+           color = ifelse(`Sample Type` %in% c("Solid Tissue Normal", "Blood Derived Normal"), "Normal", "Tumor"))) +
+  geom_point(alpha = 0.3, size = 2) +
+  theme_minimal() +
+  scale_y_continuous(trans = "log1p", breaks = c(0, 10, 100, 1000, 10000, 100000)) +
+  scale_x_log10() +
+  #scale_y_continuous(trans = "log1p", breaks = c(0, 10, 100, 1000, 10000)) +
+  labs(ylab("Number of Break Points")) +
+  labs(xlab("Fraction Genome Altered")) +
+  ggtitle(label = "Number of Break Points vs Fraction Genome Altered") +
+  labs(color = NULL) +
+  guides(color = guide_legend(override.aes = list(alpha = 1)))
+
+# numBreakPoints vs cna
+ggplot(tcga.df,
+       aes(y = numBreakPoints.3, x = cna.3,
+           color = ifelse(`Sample Type` %in% c("Solid Tissue Normal", "Blood Derived Normal"), "Normal", "Tumor"))) +
+  geom_point(alpha = 0.3, size = 2) +
+  theme_minimal() +
+  scale_y_continuous(trans = "log1p", breaks = c(0, 10, 100, 1000, 10000)) +
+  scale_x_continuous(trans = "log1p", breaks = c(0, 10, 100, 1000, 10000)) +
+  labs(xlab("Number of Copy Number Aberrations")) +
+  labs(ylab("Number of Break Points")) +
+  ggtitle(label = "Number of Break Points vs Number of Copy Number Aberrations") +
+  labs(color = NULL) +
+  guides(color = guide_legend(override.aes = list(alpha = 1)))
+
+##### tai Scatter Plots #####
+# tai vs mod.tai
+ggplot(tcga.df,
+       aes(x = tai.3, y = mod.tai.3,
+           color = ifelse(`Sample Type` %in% c("Solid Tissue Normal", "Blood Derived Normal"), "Normal", "Tumor"))) +
+  geom_point(alpha = 0.3, size = 2) +
+  theme_minimal() +
+  #scale_y_continuous(trans = "log1p", breaks = c(0, 10, 100, 1000, 10000)) +
+  #scale_x_log10() +
+  labs(xlab("Total Aberration Index Score")) +
+  labs(ylab("Modified Total Aberration Index Score")) +
+  ggtitle(label = "Total Aberration Index vs Modified Total Aberration Index") +
+  labs(color = NULL) +
+  guides(color = guide_legend(override.aes = list(alpha = 1)))
+
+# tai vs fga
+ggplot(tcga.df,
+       aes(x = tai.3, y = fga.3,
+           color = ifelse(`Sample Type` %in% c("Solid Tissue Normal", "Blood Derived Normal"), "Normal", "Tumor"))) +
+  geom_point(alpha = 0.3, size = 2) +
+  theme_minimal() +
+  #scale_y_continuous(trans = "log1p", breaks = c(0, 10, 100, 1000, 10000)) +
+  scale_y_log10() +
+  labs(xlab("Total Aberration Index Score")) +
+  labs(ylab("Fraction Genome Altered")) +
+  ggtitle(label = "Total Aberration Index vs Fraction Genome Altered") +
+  labs(color = NULL) +
+  guides(color = guide_legend(override.aes = list(alpha = 1)))
+
+### tai vs cna
+ggplot(tcga.df,
+       aes(x = tai.3, y = cna.3,
+           color = ifelse(`Sample Type` %in% c("Solid Tissue Normal", "Blood Derived Normal"), "Normal", "Tumor"))) +
+  geom_point(alpha = 0.3, size = 2) +
+  theme_minimal() +
+  scale_y_continuous(trans = "log1p", breaks = c(0, 10, 100, 1000, 10000)) +
+  #scale_y_continuous(trans = "log1p", breaks = c(0, 10, 100, 1000, 10000)) +
+  labs(ylab("Number of Copy Number Aberrations")) +
+  labs(xlab("Total Aberration Index Score")) +
+  ggtitle(label = "Number of Break Points vs Total Aberration Index") +
+  labs(color = NULL) +
+  guides(color = guide_legend(override.aes = list(alpha = 1)))
+```
+
