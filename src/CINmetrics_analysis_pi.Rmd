@@ -1,6 +1,99 @@
 ---
-title: "CIN metrics and ProliferativeIndex analysis"
+title: "CINmetrics and ProliferativeIndex analysis"
 author: "Sasha Thalluri"
 date: "8/23/2021"
 output: html_document
 ---
+
+This R Markdown will have the analysis to compare the CINmetrics to the ProliferativeIndex. 
+
+
+```{r}
+## Sasha Thalluri
+## Date: April 10, 2020, Updated: June 28, 2021
+## Input: CIN metrics and PI
+## Output: Spearman's correlation of CIN and PI in 19 Cancers
+
+library(devtools)
+library(ggpubr)
+library(dplyr)
+library(tidyverse)
+
+
+## Load Data
+load("/Volumes/G-DRIVEUSB/k99/cin-metrics/data/master/190318_cin-metrics-master_calcs_tcga.df.RData")
+load("/Users/sashthall/Desktop/ProliferativeIndex/general/data/200302_TCGA_proliferationindices.RData")
+
+
+
+# Add Sample ID to PI by taking off characters from cancer_index Sample
+# NOTE: cancer_index has the TCGA barcode under the column name Sample
+cancer_index$SampleID = cancer_index$Sample
+cancer_index <- cancer_index[, c(1, 21, 2:20)]
+cancer_index$SampleID = substr(cancer_index$SampleID,1,nchar(cancer_index$SampleID)-12)
+
+# Filter Primary Tumor Values from tcga.df
+tcga_clean <- filter(tcga.df, tcga.df$`Sample Type`== "Primary Solid Tumor")
+
+# combining PI and CIN to one df
+# NOTE: The matched Sample IDs between the CIN metrics and PI samples hhave . instead of -, so I will change that
+pi <- data.frame(cancer_index[2], stack(cancer_index[3:ncol(cancer_index)]))
+tcga_clean$`Sample ID` <- gsub("-", ".", tcga_clean$`Sample ID`)
+metricindex <- left_join(tcga_clean, pi, by = c("Sample ID" = "SampleID"))
+metricindex <- metricindex %>% drop_na()
+
+metricindex <- metricindex %>% rename("PI" = "values")
+pi$ind <- NULL
+
+
+### Saving the df
+save(metricindex, file = "210630_TCGA_tumormetricsandindices.RData")
+
+# Create pdf
+pdf("/Users/sashthall/Desktop/ProliferativeIndex/pi-corr/results/210630_tumormetricsandindicies_all.pdf")
+
+# plot fga v pi with rho values
+ggscatter(metricindex, x = "fga.3", y = "PI", size = 1, 
+          rug = TRUE, add = "reg.line", conf.int = TRUE, 
+          color = "Project", palette = "jco", xlab = "Fraction of Genome Altered", ylab = "Proliferative Index") +
+  stat_cor(aes(color = Project), method = "spearman")
+
+
+# plot break points v pi with rho values
+ggscatter(metricindex, x = "numBreakPoints.3", y = "PI", size = 1, 
+          rug = TRUE, add = "reg.line", conf.int = TRUE, 
+          color = "Project", palette = "jco", xlab = "Number of Break Points", ylab = "Proliferative Index") +
+  stat_cor(aes(color = Project), method = "spearman", label.x = 10000)
+
+
+# plot number of bases altered v pi with rho values
+ggscatter(metricindex, x = "numBases.3", y = "PI", size = 1, 
+          rug = TRUE, add = "reg.line", conf.int = TRUE, 
+          color = "Project", palette = "jco", xlab = "Number of Bases Altered", ylab = "Proliferative Index") +
+  stat_cor(aes(color = Project), method = "spearman")
+
+
+# plot Total Abberation Index v pi with rho values
+ggscatter(metricindex, x = "tai.3", y = "PI", size = 1, 
+          rug = TRUE, add = "reg.line", conf.int = TRUE, 
+          color = "Project", palette = "jco", xlab = "Total Aberration Index", ylab = "Proliferative Index") +
+  stat_cor(aes(color = Project), method = "spearman")
+
+
+# plot modified Total Abberation Index v pi with rho values
+ggscatter(metricindex, x = "mod.tai.3", y = "PI", size = .4, 
+          rug = TRUE, add = "reg.line", conf.int = TRUE, 
+          color = "Project", palette = "jco", xlab = "Modified Total Aberration Index", ylab = "Proliferative Index") +
+  stat_cor(aes(color = Project), method = "spearman")
+
+# plot modified cna v pi with rho values
+ggscatter(metricindex, x = "cna.3", y = "PI", size = .4, 
+          rug = TRUE, add = "reg.line", conf.int = TRUE, 
+          color = "Project", palette = "jco", xlab = "Copy Number Abnormalities", ylab = "Proliferative Index") +
+  stat_cor(aes(color = Project), method = "spearman")
+
+
+dev.off()
+```
+
+
