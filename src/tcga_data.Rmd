@@ -7,6 +7,7 @@ output: html_document
 
 This R Markdown will have the code to download the The Cancer Genome Atlas (TCGA) data used for subsequent analyses. In this document, we download masked CNV data from all of the 33 cancers available in the TCGA cohort. The output from this R Markdown will be a CSV with the masked CNV data for all 33 cancers that can be used for the downstream analyses. 
 
+Masked CNV
 
 ```{r}
 ### Title: Getting all TCGA CNV Datasets using TGCAbiolinks
@@ -656,3 +657,72 @@ clinical.tcga <- rbind(clinical.ACC, clinical.BLCA, clinical.BRCA, clinical.CESC
                        clinical.PRAD, clinical.READ, clinical.SARC, clinical.SKCM, clinical.STAD, clinical.TGCT, clinical.THCA, clinical.THYM, clinical.UCEC, clinical.UCS, clinical.UVM)
 
 ```
+
+
+Gene expression
+```{r}
+### Title: Get all Gene expression data from TCGA
+### Written by: Roshan Darji
+### Date: 2018.11.19
+### Last Updated: 2018.11.20
+### Goal: Obtain and combine all TCGA gene expression data into one object
+
+##### Packages #####
+suppressPackageStartupMessages(library(TCGAbiolinks))
+suppressPackageStartupMessages(library(SummarizedExperiment))
+suppressPackageStartupMessages(library(tidyverse))
+
+
+##### Obtaining TCGA Gene Expression Data #####
+# Creating a vector with all the TCGA Cancer acronyms 
+tcgaCancerList <- c("ACC", "BLCA", "BRCA", "CESC", "CHOL", "COAD", "DLBC", "ESCA", "GBM", "HNSC", "KICH",
+                    "KIRC", "KIRP", "LAML", "LGG", "LIHC", "LUAD", "LUSC", "MESO", "OV", "PAAD", "PCPG",
+                    "PRAD", "READ", "SARC", "SKCM", "STAD", "TGCT", "THCA", "THYM", "UCEC", "UCS", "UVM")
+# Looping to query all TCGA projects
+setwd("general/")
+for (cancer in 1:length(tcgaCancerList)) {
+  assign(paste("query.exp.hg38.", tcgaCancerList[cancer], sep = ""),
+         GDCquery(project = paste("TCGA-", tcgaCancerList[cancer], sep = ""),
+                  data.category = "Transcriptome Profiling",
+                  data.type = "Gene Expression Quantification",
+                  workflow.type = "HTSeq - Counts"))
+}
+beepr::beep(sound = 5)
+
+# Looping to download all TCGA projects
+tcgaQueryList <- ls(pattern = "query.exp.hg38.")
+for (query in 1:length(tcgaQueryList)) {
+  GDCdownload(query = base::get(tcgaQueryList[query]))
+}
+
+# Looping to prepare all TCGA projects
+for (query in 1:length(tcgaQueryList)) {
+  assign(paste("exp.", tcgaCancerList[query], sep = ""),
+         GDCprepare(query = base::get(tcgaQueryList[query])))
+ }
+beepr::beep(sound = 5)
+
+##### Combining all data into one object #####
+tcgaExpList <- ls(pattern = "^exp.")
+exp.tcga.list <- list()
+for (cancer in 1:length(tcgaExpList)) {
+  exp.tcga.list[[cancer]] <- get(tcgaExpList[cancer])
+  exp.tcga.list[[cancer]] <- exp.tcga.list[[cancer]][, !duplicated(exp.tcga.list[[cancer]]@colData$sample)] # Removes duplicates
+}
+names(exp.tcga.list) <- tcgaCancerList
+rm(list = c(tcgaExpList, tcgaQueryList))
+
+##### Combinded RangedSummarizedExperiment object instead of list #####
+exp.tcga <- exp.tcga.list[[1]]
+for (cancer in 2:length(exp.tcga.list)) {
+  exp.tcga <- cbind(exp.tcga, exp.tcga.list[[cancer]])
+}
+
+##### Saving the data #####
+setwd("../")
+save(exp.tcga,
+     file = "general/get-tcga/data/190205_getTCGA-exp_exp.tcga.RData")
+save(exp.tcga.list,
+     file = "general/get-tcga/data/190220_getTCGA-exp_exp.tcga.list.RData")
+```
+
