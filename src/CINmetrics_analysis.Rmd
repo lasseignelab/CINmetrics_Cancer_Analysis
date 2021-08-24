@@ -409,3 +409,36 @@ ggplot(tcga.df,
   guides(color = guide_legend(override.aes = list(alpha = 1)))
 ```
 
+Strip Charts - Sasha
+
+```{r setup, include=FALSE}
+library(ggpubr)
+library(tidyverse)
+library(ggsci)
+library(devtools)
+
+load("/data/project/lasseigne_lab/SashaThalluri/k99/cin-metrics/data/190318_cin-metrics-master_calcs_tcga.df.RData")
+
+```
+
+
+```{r}
+##### Creating Strip Charts #####
+## Data Cleaning
+# Normal and Tumor Type Separation
+tcga.df$`Sample Type` <- as.character(tcga.df$`Sample Type`)
+tcga.df$`Sample Type` <- ifelse(tcga.df$`Sample Type` %in% c("Blood Derived Normal", "Solid Tissue Normal"), "Normal", tcga.df$`Sample Type`)
+tcga.df$`Sample Type` <- ifelse(tcga.df$`Sample Type` %in% c("Primary Solid Tumor", "Metastatic", "Primary Blood Derived Cancer"), "Tumor", tcga.df$`Sample Type`)
+# log10 Transformation
+log10.tcga <- log10(tcga.df[, c(7:12)])
+log10.tcga <- tcga.df[, -c(7:12)] %>% cbind(., log10.tcga)
+
+## Strip Chart Plot
+cin_metrics <- c("numBases.3", "numBreakPoints.3", "tai.3", "mod.tai.3", "fga.3", "cna.3")
+pdf("/data/project/lasseigne_lab/SashaThalluri/k99/cin-metrics/results/210819_combinedstripplotscinmetrics.pdf", width = 8, height = 12)
+ggstripchart(log10.tcga, x = "Project", y = cin_metrics, fill = "Sample Type", color = "Sample Type", palette = "simpsons", size = .05, xlab = "Cancer", ylab = "Value", position = position_jitterdodge(jitter.width = .7, jitter.height = .5 ,dodge.width = 3), rotate = TRUE, alpha = .5, combine = TRUE, add = "mean_sd", add.params = list(size = .05, alpha = 1, group = "Sample Type", color = "black")) 
+dev.off()
+
+```
+
+
