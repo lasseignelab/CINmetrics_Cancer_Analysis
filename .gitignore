@@ -37,3 +37,9 @@ vignettes/*.pdf
 
 # R Environment Variables
 .Renviron
+
+# data folder
+/data/
+
+# GDC folder
+/src/GDCdata/
