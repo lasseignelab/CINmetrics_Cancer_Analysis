@@ -447,6 +447,7 @@ dev.off()
 ```{r}
 library(CINmetrics)
 library(tidyverse)
+library(ggpubr)
 ```
 
 ```{r}
@@ -457,12 +458,49 @@ modified.tai.cancer <- taiModified(all.cancer.df)
 cinmetrics.cancer <- CINmetrics(all.cancer.df)
 cinmetrics.cancer <- inner_join(cinmetrics.cancer, modified.tai.cancer, by = "sample_id")
 cinmetrics.cancer <- cinmetrics.cancer %>% separate(sample_id, "patient_id", 12, remove = FALSE)
-all.cinmetrics.df <- inner_join(cinmetrics.cancer, all.cancer.df[,c(7,10)], by = c("sample_id" = "Sample")) %>% unique(.) %>% select("sample_id", "patient_id", "project", "tai", "modified_tai", "cna", "base_segments", "break_points", "fga")
+all.cinmetrics.df <- inner_join(cinmetrics.cancer, all.cancer.df[,c(7,10,11)], by = c("sample_id" = "Sample")) %>% unique(.) %>% select("sample_id", "patient_id", "project", "sample_type", "tai", "modified_tai", "cna", "base_segments", "break_points", "fga") 
+
 return(all.cinmetrics.df)
 }
 
 all.cinmetrics.df <- get_cinmetrics(all.cancer.df)
+
 ```
 
+```{r}
+## This function will take the dataframe with all of the CINmetrics values and will plot a stripchart.
+
+get_cinmetrics_stripchart <- function(all.cinmetrics.df){
+# Grouping normal and tumor samples
+all.cinmetrics.df$sample_type <- ifelse(all.cinmetrics.df$sample_type %in% c("Blood Derived Normal", "Solid Tissue Normal", "Bone Marrow Normal", "Buccal Cell Normal"), "Normal", all.cinmetrics.df$sample_type)
+all.cinmetrics.df$sample_type  <- ifelse(all.cinmetrics.df$sample_type  %in% c("Metastatic", "Primary Blood Derived Cancer", "Primary Tumor", "Recurrent Tumor", "Additional - New Primary", "Primary Blood Derived Cancer - Peripheral Blood"), "Tumor", all.cinmetrics.df$sample_type )
+
+# Plotting stripchart
+cinmetrics <- c("tai", "modified_tai", "cna", "base_segments", "break_points", "fga")
+cinmetrics_stripchart <- ggstripchart(all.cinmetrics.df,
+                                      x = "project", y = cinmetrics, 
+                                      fill = "sample_type", 
+                                      color = "sample_type", 
+                                      palette = "simpsons", 
+                                      size = .05, 
+                                      xlab = "Cancer", ylab = "log10(CINmetrics)", 
+                                      yscale = "log10",
+                                      format.scale = TRUE,
+                                      
+                                      position = position_jitterdodge(jitter.width = .7, jitter.height = .5 ,dodge.width = 3), 
+                                      rotate = TRUE, alpha = .5, 
+                                      combine = TRUE, 
+                                      add = "mean_sd", add.params = list(size = .05, alpha = 1, group = "sample_type", color = "black")) 
+
+return(cinmetrics_stripchart)
+
+}
+
+cinmetrics_stripchart <- get_cinmetrics_stripchart(all.cinmetrics.df)
+cinmetrics_stripchart
+
+
+
+```
 
 
