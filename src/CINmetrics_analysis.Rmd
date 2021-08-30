@@ -411,7 +411,7 @@ ggplot(tcga.df,
 
 Strip Charts - Sasha
 
-```{r setup, include=FALSE}
+```{r}
 library(ggpubr)
 library(tidyverse)
 library(ggsci)
@@ -440,5 +440,29 @@ ggstripchart(log10.tcga, x = "Project", y = cin_metrics, fill = "Sample Type", c
 dev.off()
 
 ```
+
+
+## CINmetrics with CIN metrics Package
+
+```{r}
+library(CINmetrics)
+library(tidyverse)
+```
+
+```{r}
+## The function takes the dataframe with all of the CNV data and calculates the CINmetrics. It is merged with the TCGA project name.
+
+get_cinmetrics <- function(all.cancer.df){
+modified.tai.cancer <- taiModified(all.cancer.df)
+cinmetrics.cancer <- CINmetrics(all.cancer.df)
+cinmetrics.cancer <- inner_join(cinmetrics.cancer, modified.tai.cancer, by = "sample_id")
+cinmetrics.cancer <- cinmetrics.cancer %>% separate(sample_id, "patient_id", 12, remove = FALSE)
+all.cinmetrics.df <- inner_join(cinmetrics.cancer, all.cancer.df[,c(7,10)], by = c("sample_id" = "Sample")) %>% unique(.) %>% select("sample_id", "patient_id", "project", "tai", "modified_tai", "cna", "base_segments", "break_points", "fga")
+return(all.cinmetrics.df)
+}
+
+all.cinmetrics.df <- get_cinmetrics(all.cancer.df)
+```
+
 
 
