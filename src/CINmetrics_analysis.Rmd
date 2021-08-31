@@ -648,15 +648,15 @@ cinmetrics.stripchart
 
 ## Creating CINmetrics Heatmaps
 ```{r}
-## This function will take the dataframe with all of the CINmetrics values, subset the tumor samples, and will plot a heatmap for all of the CINmetrics across all 33 cancers.
+## This function will take the all.cinmetrics.df, subset the tumor samples, and will plot a heatmap for all of the CINmetrics across all 33 cancers.
 
 get_cinmetrics_heatmap <- function(all.cinmetrics.df){
 # Subsetting all.cinmetrics.df by tumor samples
 tumor.cinmetrics.df <- all.cinmetrics.df %>% filter(sample_type %in% c("Metastatic", "Primary Blood Derived Cancer", "Primary Tumor", "Recurrent Tumor", "Additional - New Primary", "Primary Blood Derived Cancer - Peripheral Blood"))
 # Performing Spearman's correlation across all CINmetrics values in tumor samples
 spearman.tumor.cinmetrics <- tumor.cinmetrics.df[,c(5:10)] %>% drop_na() %>% cor(., method = "spearman")
-heatmap.colors <- colorRamp2(c(-1, 0, 1), c("#FED439FF", "#FFFFFF", "#709AE1FF"))
 # Heatmap of Spearman's correlation
+heatmap.colors <- colorRamp2(c(-1, 0, 1), c("#FED439FF", "#FFFFFF", "#709AE1FF"))
 tumor.cinmetrics.heatmap <- Heatmap(spearman.tumor.cinmetrics,
                                     col = heatmap.colors,
                                     show_row_dend = FALSE,
@@ -672,6 +672,14 @@ return(tumor.cinmetrics.heatmap)
 
 tumor.cinmetrics.heatmap <- get_cinmetrics_heatmap(all.cinmetrics.df)
 tumor.cinmetrics.heatmap
+```
+
+```{r}
+## This function will subset the tumor samples from the all.cinmetrics.df and plot a heatmap for all of the CINmetrics separated by each of the 33 cancers. 
+
+get_cinmetrics_cancer_heatmap <- function(all.cinmetrics.df){}
+tumor.cinmetrics.df <- all.cinmetrics.df %>% filter(sample_type %in% c("Metastatic", "Primary Blood Derived Cancer", "Primary Tumor", "Recurrent Tumor", "Additional - New Primary", "Primary Blood Derived Cancer - Peripheral Blood"))
+
 
 ```
 
