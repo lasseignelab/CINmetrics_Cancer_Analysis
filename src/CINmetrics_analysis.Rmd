@@ -467,40 +467,175 @@ all.cinmetrics.df <- get_cinmetrics(all.cancer.df)
 
 ```
 
+
 ```{r}
-## This function will take the dataframe with all of the CINmetrics values and will plot a stripchart.
+## This function will take the dataframe with all of the CINmetrics values and will plot a stripchart for all of the CINmetrics across all 33 cancers.
 
 get_cinmetrics_stripchart <- function(all.cinmetrics.df){
-# Grouping normal and tumor samples
+# Grouping different sample types by normal and tumor samples
 all.cinmetrics.df$sample_type <- ifelse(all.cinmetrics.df$sample_type %in% c("Blood Derived Normal", "Solid Tissue Normal", "Bone Marrow Normal", "Buccal Cell Normal"), "Normal", all.cinmetrics.df$sample_type)
 all.cinmetrics.df$sample_type  <- ifelse(all.cinmetrics.df$sample_type  %in% c("Metastatic", "Primary Blood Derived Cancer", "Primary Tumor", "Recurrent Tumor", "Additional - New Primary", "Primary Blood Derived Cancer - Peripheral Blood"), "Tumor", all.cinmetrics.df$sample_type )
 
-# Plotting stripchart
-cinmetrics <- c("tai", "modified_tai", "cna", "base_segments", "break_points", "fga")
-cinmetrics_stripchart <- ggstripchart(all.cinmetrics.df,
-                                      x = "project", y = cinmetrics, 
+# Base Segments Plot
+base_segments_stripchart <- ggstripchart(all.cinmetrics.df,
+                                      x = "project", y = "base_segments", 
                                       fill = "sample_type", 
                                       color = "sample_type", 
                                       palette = "simpsons", 
                                       size = .05, 
-                                      xlab = "Cancer", ylab = "log10(CINmetrics)", 
+                                      xlab = "Cancer", 
+                                      ylab = "log10(Base Segments)",
                                       yscale = "log10",
                                       format.scale = TRUE,
-                                      
                                       position = position_jitterdodge(jitter.width = .7, jitter.height = .5 ,dodge.width = 3), 
-                                      rotate = TRUE, alpha = .5, 
-                                      combine = TRUE, 
+                                      rotate = TRUE,
+                                      alpha = .5, 
+                                      combine = TRUE,
+                                      title = "Base Segments",
+                                      font.main = c(11, "bold"),
+                                      font.x = c(10, "bold"),
+                                      font.y = c(10, "bold"),
+                                      font.xtickslab = c(10, "bold"),
+                                      font.ytickslab = c(7, "bold"),
+                                      legend.title = "Sample Type",
+                                      font.legend = c(10, "bold"), 
                                       add = "mean_sd", add.params = list(size = .05, alpha = 1, group = "sample_type", color = "black")) 
 
-return(cinmetrics_stripchart)
+# Number of Breakpoints Plot
+break_points_stripchart <- ggstripchart(all.cinmetrics.df,
+                                      x = "project", y = "break_points", 
+                                      fill = "sample_type", 
+                                      color = "sample_type", 
+                                      palette = "simpsons", 
+                                      size = .05, 
+                                      xlab = "Cancer", 
+                                      ylab = "log10(Breakpoints)",
+                                      yscale = "log10",
+                                      format.scale = TRUE,
+                                      position = position_jitterdodge(jitter.width = .7, jitter.height = .5 ,dodge.width = 3), 
+                                      rotate = TRUE,
+                                      alpha = .5, 
+                                      combine = TRUE,
+                                      title = "Breakpoints",
+                                      font.main = c(11, "bold"),
+                                      font.x = c(10, "bold"),
+                                      font.y = c(10, "bold"),
+                                      font.xtickslab = c(10, "bold"),
+                                      font.ytickslab = c(7, "bold"),
+                                      legend.title = "Sample Type",
+                                      font.legend = c(10, "bold"),
+                                      add = "mean_sd", add.params = list(size = .05, alpha = 1, group = "sample_type", color = "black"))
+# Total Aberration Index Plot
+tai_stripchart <- ggstripchart(all.cinmetrics.df,
+                                      x = "project", y = "tai", 
+                                      fill = "sample_type", 
+                                      color = "sample_type", 
+                                      palette = "simpsons", 
+                                      size = .05, 
+                                      xlab = "Cancer", 
+                                      ylab = "log10(TAI)",
+                                      yscale = "log10",
+                                      format.scale = TRUE,
+                                      position = position_jitterdodge(jitter.width = .7, jitter.height = .5, dodge.width = 3), 
+                                      rotate = TRUE,
+                                      alpha = .5, 
+                                      combine = TRUE,
+                                      title = "TAI",
+                                      font.main = c(11, "bold"),
+                                      font.x = c(10, "bold"),
+                                      font.y = c(10, "bold"),
+                                      font.xtickslab = c(10, "bold"),
+                                      font.ytickslab = c(7, "bold"),
+                                      legend.title = "Sample Type",
+                                      font.legend = c(10, "bold"),
+                                      add = "mean_sd", add.params = list(size = .05, alpha = 1, group = "sample_type", color = "black")) 
+# Fraction of Genome Altered Plot
+fga_stripchart <- ggstripchart(all.cinmetrics.df,
+                                      x = "project", y = "fga", 
+                                      fill = "sample_type", 
+                                      color = "sample_type", 
+                                      palette = "simpsons", 
+                                      size = .05, 
+                                      xlab = "Cancer", 
+                                      ylab = "log10(FGA)",
+                                      yscale = "log10",
+                                      format.scale = TRUE,
+                                      position = position_jitterdodge(jitter.width = .7, jitter.height = .5 ,dodge.width = 3), 
+                                      rotate = TRUE,
+                                      alpha = .5, 
+                                      combine = TRUE,
+                                      title = "FGA",
+                                      font.main = c(11, "bold"),
+                                      font.x = c(10, "bold"),
+                                      font.y = c(10, "bold"),
+                                      font.xtickslab = c(10, "bold"),
+                                      font.ytickslab = c(7, "bold"),
+                                      legend.title = "Sample Type",
+                                      font.legend = c(10, "bold"),
+                                      add = "mean_sd", add.params = list(size = .05, alpha = 1, group = "sample_type", color = "black")) 
+# Copy Number Aberrations Plot
+cna_stripchart <- ggstripchart(all.cinmetrics.df,
+                                      x = "project", y = "cna", 
+                                      fill = "sample_type", 
+                                      color = "sample_type", 
+                                      palette = "simpsons", 
+                                      size = .05, 
+                                      xlab = "Cancer", 
+                                      ylab = "log10(CNA)",
+                                      yscale = "log10",
+                                      format.scale = TRUE,
+                                      position = position_jitterdodge(jitter.width = .7, jitter.height = .5 ,dodge.width = 3), 
+                                      rotate = TRUE,
+                                      alpha = .5, 
+                                      combine = TRUE,
+                                      title = "CNA",
+                                      font.main = c(11, "bold"),
+                                      font.x = c(10, "bold"),
+                                      font.y = c(10, "bold"),
+                                      font.xtickslab = c(10, "bold"),
+                                      font.ytickslab = c(7, "bold"),
+                                      legend.title = "Sample Type",
+                                      font.legend = c(10, "bold"),
+                                      add = "mean_sd", add.params = list(size = .05, alpha = 1, group = "sample_type", color = "black")) 
+# Modified Total Aberration Index Plot
+modified_tai_stripchart <- ggstripchart(all.cinmetrics.df,
+                                      x = "project", y = "modified_tai", 
+                                      fill = "sample_type", 
+                                      color = "sample_type", 
+                                      palette = "simpsons", 
+                                      size = .05, 
+                                      xlab = "Cancer", 
+                                      ylab = "log10(Modified TAI)",
+                                      yscale = "log10",
+                                      format.scale = TRUE,
+                                      position = position_jitterdodge(jitter.width = .7, jitter.height = .5 ,dodge.width = 3), 
+                                      rotate = TRUE,
+                                      alpha = .5, 
+                                      combine = TRUE,
+                                      title = "Modified TAI",
+                                      font.main = c(11, "bold"),
+                                      font.x = c(10, "bold"),
+                                      font.y = c(10, "bold"),
+                                      font.xtickslab = c(10, "bold"),
+                                      font.ytickslab = c(7, "bold"),
+                                      legend.title = "Sample Type",
+                                      font.legend = c(10, "bold"),
+                                      add = "mean_sd", add.params = list(size = .05, alpha = 1, group = "sample_type", color = "black")) 
+# CINmetrics Plot
+cinmetrics_stripchart <- ggarrange(base_segments_stripchart, 
+                                   break_points_stripchart, 
+                                   tai_stripchart, 
+                                   fga_stripchart, 
+                                   cna_stripchart,
+                                   modified_tai_stripchart, 
+                                   ncol = 3, nrow = 2, 
+                                   legend = "right", 
+                                   common.legend = TRUE)
 
+return(cinmetrics_stripchart)
 }
 
 cinmetrics_stripchart <- get_cinmetrics_stripchart(all.cinmetrics.df)
 cinmetrics_stripchart
-
-
-
 ```
-
 
