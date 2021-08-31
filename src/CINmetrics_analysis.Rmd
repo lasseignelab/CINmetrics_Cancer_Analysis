@@ -442,14 +442,18 @@ dev.off()
 ```
 
 
-## CINmetrics with CIN metrics Package
+## CINmetrics with CINmetrics Package
 
 ```{r}
 library(CINmetrics)
 library(tidyverse)
 library(ggpubr)
+library(here)
+library(ComplexHeatmap)
+library(circlize)
 ```
 
+## Creating CINmetrics Dataframe
 ```{r}
 ## The function takes the dataframe with all of the CNV data and calculates the CINmetrics. It is merged with the TCGA project name.
 
@@ -465,9 +469,12 @@ return(all.cinmetrics.df)
 
 all.cinmetrics.df <- get_cinmetrics(all.cancer.df)
 
+## We store the output of the get_cinmetrics function as a csv
+write.csv(all.cinmetrics.df, file = here("data", "processed", "all_cinmetrics_df.csv"), row.names = FALSE)
+
 ```
 
-
+## Creating CINmetrics Stripchart
 ```{r}
 ## This function will take the dataframe with all of the CINmetrics values and will plot a stripchart for all of the CINmetrics across all 33 cancers.
 
@@ -477,7 +484,7 @@ all.cinmetrics.df$sample_type <- ifelse(all.cinmetrics.df$sample_type %in% c("Bl
 all.cinmetrics.df$sample_type  <- ifelse(all.cinmetrics.df$sample_type  %in% c("Metastatic", "Primary Blood Derived Cancer", "Primary Tumor", "Recurrent Tumor", "Additional - New Primary", "Primary Blood Derived Cancer - Peripheral Blood"), "Tumor", all.cinmetrics.df$sample_type )
 
 # Base Segments Plot
-base_segments_stripchart <- ggstripchart(all.cinmetrics.df,
+base.segments.stripchart <- ggstripchart(all.cinmetrics.df,
                                       x = "project", y = "base_segments", 
                                       fill = "sample_type", 
                                       color = "sample_type", 
@@ -502,7 +509,7 @@ base_segments_stripchart <- ggstripchart(all.cinmetrics.df,
                                       add = "mean_sd", add.params = list(size = .05, alpha = 1, group = "sample_type", color = "black")) 
 
 # Number of Breakpoints Plot
-break_points_stripchart <- ggstripchart(all.cinmetrics.df,
+break.points.stripchart <- ggstripchart(all.cinmetrics.df,
                                       x = "project", y = "break_points", 
                                       fill = "sample_type", 
                                       color = "sample_type", 
@@ -526,7 +533,7 @@ break_points_stripchart <- ggstripchart(all.cinmetrics.df,
                                       font.legend = c(10, "bold"),
                                       add = "mean_sd", add.params = list(size = .05, alpha = 1, group = "sample_type", color = "black"))
 # Total Aberration Index Plot
-tai_stripchart <- ggstripchart(all.cinmetrics.df,
+tai.stripchart <- ggstripchart(all.cinmetrics.df,
                                       x = "project", y = "tai", 
                                       fill = "sample_type", 
                                       color = "sample_type", 
@@ -550,7 +557,7 @@ tai_stripchart <- ggstripchart(all.cinmetrics.df,
                                       font.legend = c(10, "bold"),
                                       add = "mean_sd", add.params = list(size = .05, alpha = 1, group = "sample_type", color = "black")) 
 # Fraction of Genome Altered Plot
-fga_stripchart <- ggstripchart(all.cinmetrics.df,
+fga.stripchart <- ggstripchart(all.cinmetrics.df,
                                       x = "project", y = "fga", 
                                       fill = "sample_type", 
                                       color = "sample_type", 
@@ -574,7 +581,7 @@ fga_stripchart <- ggstripchart(all.cinmetrics.df,
                                       font.legend = c(10, "bold"),
                                       add = "mean_sd", add.params = list(size = .05, alpha = 1, group = "sample_type", color = "black")) 
 # Copy Number Aberrations Plot
-cna_stripchart <- ggstripchart(all.cinmetrics.df,
+cna.stripchart <- ggstripchart(all.cinmetrics.df,
                                       x = "project", y = "cna", 
                                       fill = "sample_type", 
                                       color = "sample_type", 
@@ -598,7 +605,7 @@ cna_stripchart <- ggstripchart(all.cinmetrics.df,
                                       font.legend = c(10, "bold"),
                                       add = "mean_sd", add.params = list(size = .05, alpha = 1, group = "sample_type", color = "black")) 
 # Modified Total Aberration Index Plot
-modified_tai_stripchart <- ggstripchart(all.cinmetrics.df,
+modified.tai.stripchart <- ggstripchart(all.cinmetrics.df,
                                       x = "project", y = "modified_tai", 
                                       fill = "sample_type", 
                                       color = "sample_type", 
@@ -622,20 +629,49 @@ modified_tai_stripchart <- ggstripchart(all.cinmetrics.df,
                                       font.legend = c(10, "bold"),
                                       add = "mean_sd", add.params = list(size = .05, alpha = 1, group = "sample_type", color = "black")) 
 # CINmetrics Plot
-cinmetrics_stripchart <- ggarrange(base_segments_stripchart, 
-                                   break_points_stripchart, 
-                                   tai_stripchart, 
-                                   fga_stripchart, 
-                                   cna_stripchart,
-                                   modified_tai_stripchart, 
+cinmetrics.stripchart <- ggarrange(base.segments.stripchart, 
+                                   break.points.stripchart, 
+                                   tai.stripchart, 
+                                   fga.stripchart, 
+                                   cna.stripchart,
+                                   modified.tai.stripchart, 
                                    ncol = 3, nrow = 2, 
                                    legend = "right", 
                                    common.legend = TRUE)
 
-return(cinmetrics_stripchart)
+return(cinmetrics.stripchart)
 }
 
-cinmetrics_stripchart <- get_cinmetrics_stripchart(all.cinmetrics.df)
-cinmetrics_stripchart
+cinmetrics.stripchart <- get_cinmetrics_stripchart(all.cinmetrics.df)
+cinmetrics.stripchart
+```
+
+## Creating CINmetrics Heatmaps
+```{r}
+## This function will take the dataframe with all of the CINmetrics values, subset the tumor samples, and will plot a heatmap for all of the CINmetrics across all 33 cancers.
+
+get_cinmetrics_heatmap <- function(all.cinmetrics.df){
+# Subsetting all.cinmetrics.df by tumor samples
+tumor.cinmetrics.df <- all.cinmetrics.df %>% filter(sample_type %in% c("Metastatic", "Primary Blood Derived Cancer", "Primary Tumor", "Recurrent Tumor", "Additional - New Primary", "Primary Blood Derived Cancer - Peripheral Blood"))
+# Performing Spearman's correlation across all CINmetrics values in tumor samples
+spearman.tumor.cinmetrics <- tumor.cinmetrics.df[,c(5:10)] %>% drop_na() %>% cor(., method = "spearman")
+heatmap.colors <- colorRamp2(c(-1, 0, 1), c("#FED439FF", "#FFFFFF", "#709AE1FF"))
+# Heatmap of Spearman's correlation
+tumor.cinmetrics.heatmap <- Heatmap(spearman.tumor.cinmetrics,
+                                    col = heatmap.colors,
+                                    show_row_dend = FALSE,
+                                    show_column_dend = FALSE,
+                                    row_labels = c("TAI", "Modified TAI", "CNA", "Base Segments", "Breakpoints", "FGA"),
+                                    row_names_gp = gpar(fontsize = 10, fontface = "bold"),
+                                    column_labels = c("TAI", "Modified TAI", "CNA", "Base Segments", "Breakpoints", "FGA"),
+                                    column_names_gp = gpar(fontsize = 10, fontface = "bold"),
+                                    column_names_rot = 45,
+                                    heatmap_legend_param = list(title = "Value", title_gp = gpar(fontsize = 10, fontface = "bold")))
+return(tumor.cinmetrics.heatmap)
+}
+
+tumor.cinmetrics.heatmap <- get_cinmetrics_heatmap(all.cinmetrics.df)
+tumor.cinmetrics.heatmap
+
 ```
 
