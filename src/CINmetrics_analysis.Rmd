@@ -650,27 +650,57 @@ cinmetrics.stripchart
 ```{r}
 ## This function will take the all.cinmetrics.df, subset the tumor samples, and will plot a heatmap for all of the CINmetrics across all 33 cancers.
 
-get_cinmetrics_heatmap <- function(all.cinmetrics.df){
+get_cinmetrics_heatmap <- function(all.cinmetrics.df, sample.type){
+
+if(sample.type == "normal"){
+# Subsetting all.cinmetrics.df by normal samples
+normal.cinmetrics.df <- all.cinmetrics.df %>% filter(sample_type %in% c("Blood Derived Normal", "Solid Tissue Normal", "Bone Marrow Normal", "Buccal Cell Normal"))
+
+# Performing Spearman's correlation across all CINmetrics values in normal samples
+spearman.normal.cinmetrics <- normal.cinmetrics.df %>% select(tai, modified_tai, cna, base_segments, break_points, fga) %>% cor(., method = "spearman")
+# Heatmap of Spearman's correlation
+heatmap.colors <- colorRamp2(c(-1, 0, 1), c("#FED439FF", "#FFFFFF", "#709AE1FF"))
+normal.cinmetrics.heatmap <- Heatmap(spearman.normal.cinmetrics,
+                                    col = heatmap.colors,
+                                    show_row_dend = FALSE,
+                                    show_column_dend = FALSE,
+                                    column_title = "Normal",
+                                    column_title_gp = gpar(fontsize = 10, fontface = "bold"),
+                                    row_labels = c("TAI", "Modified TAI", "CNA", "Base Segments", "Breakpoints", "FGA"),
+                                    row_names_gp = gpar(fontsize = 10, fontface = "bold"),
+                                    column_labels = c("TAI", "Modified TAI", "CNA", "Base Segments", "Breakpoints", "FGA"),
+                                    column_names_gp = gpar(fontsize = 10, fontface = "bold"),
+                                    column_names_rot = 45,
+                                    heatmap_legend_param = list(title = "Spearman's Rho", title_gp = gpar(fontsize = 10, fontface = "bold")))
+return(normal.cinmetrics.heatmap)
+}
+
+if(sample.type == "tumor"){
 # Subsetting all.cinmetrics.df by tumor samples
 tumor.cinmetrics.df <- all.cinmetrics.df %>% filter(sample_type %in% c("Metastatic", "Primary Blood Derived Cancer", "Primary Tumor", "Recurrent Tumor", "Additional - New Primary", "Primary Blood Derived Cancer - Peripheral Blood"))
 # Performing Spearman's correlation across all CINmetrics values in tumor samples
-spearman.tumor.cinmetrics <- tumor.cinmetrics.df[,c(5:10)] %>% drop_na() %>% cor(., method = "spearman")
+spearman.tumor.cinmetrics <- tumor.cinmetrics.df %>% select(tai, modified_tai, cna, base_segments, break_points, fga) %>% drop_na() %>% cor(., method = "spearman")
 # Heatmap of Spearman's correlation
 heatmap.colors <- colorRamp2(c(-1, 0, 1), c("#FED439FF", "#FFFFFF", "#709AE1FF"))
 tumor.cinmetrics.heatmap <- Heatmap(spearman.tumor.cinmetrics,
                                     col = heatmap.colors,
                                     show_row_dend = FALSE,
                                     show_column_dend = FALSE,
+                                    column_title = "Tumor",
+                                    column_title_gp = gpar(fontsize = 10, fontface = "bold"),
                                     row_labels = c("TAI", "Modified TAI", "CNA", "Base Segments", "Breakpoints", "FGA"),
                                     row_names_gp = gpar(fontsize = 10, fontface = "bold"),
                                     column_labels = c("TAI", "Modified TAI", "CNA", "Base Segments", "Breakpoints", "FGA"),
                                     column_names_gp = gpar(fontsize = 10, fontface = "bold"),
                                     column_names_rot = 45,
-                                    heatmap_legend_param = list(title = "Value", title_gp = gpar(fontsize = 10, fontface = "bold")))
+                                    heatmap_legend_param = list(title = "Spearman's Rho", title_gp = gpar(fontsize = 10, fontface = "bold")))
 return(tumor.cinmetrics.heatmap)
 }
+}
+normal.cinmetrics.heatmap <- get_cinmetrics_heatmap(all.cinmetrics.df, sample.type = "normal")
+normal.cinmetrics.heatmap
 
-tumor.cinmetrics.heatmap <- get_cinmetrics_heatmap(all.cinmetrics.df)
+tumor.cinmetrics.heatmap <- get_cinmetrics_heatmap(all.cinmetrics.df, sample.type = "tumor")
 tumor.cinmetrics.heatmap
 ```
 
