@@ -441,7 +441,7 @@ dev.off()
 
 ```
 
-
+-------------------------------------------------------------------
 ## CINmetrics with CINmetrics Package
 
 ```{r}
@@ -451,6 +451,7 @@ library(ggpubr)
 library(here)
 library(ComplexHeatmap)
 library(circlize)
+library(reshape2)
 ```
 
 ## Creating CINmetrics Dataframe
@@ -648,7 +649,7 @@ cinmetrics.stripchart
 
 ## Creating CINmetrics Heatmaps
 ```{r}
-## This function will take the all.cinmetrics.df, subset the tumor samples, and will plot a heatmap for all of the CINmetrics across all 33 cancers.
+## This function will take the all.cinmetrics.df, subset the tumor samples, and will plot a heatmap for all of the CINmetrics across all 33 cancers. For sample.type "normal" or "tumor" will be the input to produce the correct heatmap based on sample types. 
 
 get_cinmetrics_heatmap <- function(all.cinmetrics.df, sample.type){
 
@@ -705,10 +706,88 @@ tumor.cinmetrics.heatmap
 ```
 
 ```{r}
-## This function will subset the tumor samples from the all.cinmetrics.df and plot a heatmap for all of the CINmetrics separated by each of the 33 cancers. 
+## This function will subset the tumor samples from the all.cinmetrics.df and plot a heatmap for all of the CINmetrics separated by each of the 33 cancers. This function can only be used if there are 2 or more cancers being compared
 
-get_cinmetrics_cancer_heatmap <- function(all.cinmetrics.df){}
-tumor.cinmetrics.df <- all.cinmetrics.df %>% filter(sample_type %in% c("Metastatic", "Primary Blood Derived Cancer", "Primary Tumor", "Recurrent Tumor", "Additional - New Primary", "Primary Blood Derived Cancer - Peripheral Blood"))
+## This function will calculate the Spearman's correlation for the CINmetrics and will produce a dataframe with the Spearman Rho values between each metric separated by cancer projects. This function can only be used if there are 2 or more cancers being compared
+
+
+get_cinmetrics_cancer_heatmap <- function(all.cinmetrics.df, sample.type){
+  if(sample.type == "tumor"){
+    # Subsetting all.cinmetrics.df by tumor samples
+    tumor.cinmetrics.df <- all.cinmetrics.df %>% filter(sample_type %in% c("Metastatic", "Primary Blood Derived Cancer", "Primary Tumor", "Recurrent Tumor", "Additional - New Primary", "Primary Blood Derived Cancer - Peripheral Blood"))
+    
+    # Creating df with Spearman Rho values from CINmetrics in each cancer
+    spearman.variables <- names(tumor.cinmetrics.df)[c(5:10)]
+    all.spearman.df <- tumor.cinmetrics.df %>% drop_na %>% split(.$project) %>% map(select, spearman.variables) %>% map(function(x) cor(x, method = "spearman")) %>% map(melt) %>% melt(.) %>% select(-"variable")
+    names(all.spearman.df) <- c("cinmetric1", "cinmetric2", "spearman_rho", "project")
+    
+    # Filtering dataframe to have rows we will use for heatmap, inserting a column with comparison name to use in heatmap
+    filtered.spearman.df <- filter(all.spearman.df, (cinmetric1 == "base_segments" & cinmetric2 %in% c("break_points", "cna", "fga", "modified_tai", "tai")) | (cinmetric1== "break_points" & cinmetric2 %in% c("cna", "modified_tai", "tai")) | (cinmetric1 == "cna" & cinmetric2 %in% c("modified_tai", "tai")) | (cinmetric1 == "fga" & cinmetric2 %in% c("break_points", "cna", "modified_tai", "tai")) | (cinmetric1 == "modified_tai" & cinmetric2 == "tai")) %>%
+      mutate(comparison = ifelse(cinmetric1 %in%  "base_segments" & cinmetric2 %in% "break_points", "Base Segments vs Breakpoints", ifelse(cinmetric1 %in% "base_segments" & cinmetric2 %in% "cna", "Base Segments vs CNA", ifelse(cinmetric1 %in% "base_segments" & cinmetric2 %in% "fga", "Base Segments vs FGA", ifelse(cinmetric1 %in% "base_segments" & cinmetric2 %in% "modified_tai", "Base Segments vs Modified TAI", ifelse(cinmetric1 %in% "base_segments" & cinmetric2 %in% "tai", "Base Segments vs TAI", ifelse(cinmetric1 %in% "break_points" & cinmetric2 %in% "cna", "Breakpoints vs CNA", ifelse(cinmetric1 %in% "break_points" & cinmetric2 %in% "modified_tai", "Breakpoints vs Modified TAI", ifelse(cinmetric1 %in% "break_points" & cinmetric2 %in% "tai", "Breakpoints vs TAI", ifelse(cinmetric1 %in% "cna" & cinmetric2 %in% "modified_tai", "CNA vs Modified TAI", ifelse(cinmetric1 %in% "cna" & cinmetric2 %in% "tai", "CNA vs TAI", ifelse(cinmetric1 %in% "fga" & cinmetric2 %in% "break_points", "FGA vs Breakpoints", ifelse(cinmetric1 %in% "fga" & cinmetric2 %in% "cna", "FGA vs CNA", ifelse(cinmetric1 %in% "fga" & cinmetric2 %in% "modified_tai", "FGA vs Modified TAI", ifelse(cinmetric1 %in% "fga" & cinmetric2 %in% "tai", "FGA vs TAI", ifelse(cinmetric1 %in% "modified_tai" & cinmetric2 %in% "tai", "Modified TAI vs TAI", "NA"))))))))))))))))
+    
+    # Transforming dataframe to use for heatmap
+    transformed.spearman.df <- filtered.spearman.df %>% select(project, comparison, spearman_rho) %>% pivot_wider(names_from = comparison, values_from = spearman_rho)
+    transformed.spearman.df$project <- str_remove(transformed.spearman.df$project, "TCGA-") 
+    transformed.spearman.df <- column_to_rownames(transformed.spearman.df, var = "project")
+    
+    # Creating Heatmap
+    heatmap.colors <- colorRamp2(c(-1, 0, 1), c("#FED439FF", "#FFFFFF", "#709AE1FF"))
+    tumor.cancer.heatmap <- Heatmap(transformed.spearman.df,
+                                    rect_gp = gpar(col = "white", lwd = .5),
+                                    col = heatmap.colors,
+                                    show_column_dend = TRUE,
+                                    show_row_dend = FALSE,
+                                    column_title = "Tumor",
+                                    column_title_gp = gpar(fontsize = 10, fontface = "bold"),
+                                    row_names_gp = gpar(fontsize = 10, fontface = "bold"),
+                                    column_names_gp = gpar(fontsize = 10, fontface = "bold"),
+                                    column_names_rot = 45,
+                                    heatmap_legend_param = list(title = "Spearman's Rho", title_gp = gpar(fontsize = 10, fontface = "bold")))
+    return(tumor.cancer.heatmap)
+  }
+    if(sample.type == "normal"){
+    # Subsetting all.cinmetrics.df by normal samples
+    normal.cinmetrics.df <- all.cinmetrics.df %>% filter(sample_type %in% c("Blood Derived Normal", "Solid Tissue Normal", "Bone Marrow Normal", "Buccal Cell Normal"))
+    
+    # Creating df with Spearman Rho values from CINmetrics in each cancer
+    spearman.variables <- names(normal.cinmetrics.df)[c(5:10)]
+    all.spearman.df <- normal.cinmetrics.df %>% drop_na %>% split(.$project) %>% map(select, spearman.variables) %>% map(function(x) cor(x, method = "spearman")) %>% map(melt) %>% melt(.) %>% select(-"variable")
+    names(all.spearman.df) <- c("cinmetric1", "cinmetric2", "spearman_rho", "project")
+    
+    # Filtering dataframe to have rows we will use for heatmap, inserting a column with comparison name to use in heatmap
+    filtered.spearman.df <- filter(all.spearman.df, (cinmetric1 == "base_segments" & cinmetric2 %in% c("break_points", "cna", "fga", "modified_tai", "tai")) | (cinmetric1== "break_points" & cinmetric2 %in% c("cna", "modified_tai", "tai")) | (cinmetric1 == "cna" & cinmetric2 %in% c("modified_tai", "tai")) | (cinmetric1 == "fga" & cinmetric2 %in% c("break_points", "cna", "modified_tai", "tai")) | (cinmetric1 == "modified_tai" & cinmetric2 == "tai")) %>%
+      mutate(comparison = ifelse(cinmetric1 %in%  "base_segments" & cinmetric2 %in% "break_points", "Base Segments vs Breakpoints", ifelse(cinmetric1 %in% "base_segments" & cinmetric2 %in% "cna", "Base Segments vs CNA", ifelse(cinmetric1 %in% "base_segments" & cinmetric2 %in% "fga", "Base Segments vs FGA", ifelse(cinmetric1 %in% "base_segments" & cinmetric2 %in% "modified_tai", "Base Segments vs Modified TAI", ifelse(cinmetric1 %in% "base_segments" & cinmetric2 %in% "tai", "Base Segments vs TAI", ifelse(cinmetric1 %in% "break_points" & cinmetric2 %in% "cna", "Breakpoints vs CNA", ifelse(cinmetric1 %in% "break_points" & cinmetric2 %in% "modified_tai", "Breakpoints vs Modified TAI", ifelse(cinmetric1 %in% "break_points" & cinmetric2 %in% "tai", "Breakpoints vs TAI", ifelse(cinmetric1 %in% "cna" & cinmetric2 %in% "modified_tai", "CNA vs Modified TAI", ifelse(cinmetric1 %in% "cna" & cinmetric2 %in% "tai", "CNA vs TAI", ifelse(cinmetric1 %in% "fga" & cinmetric2 %in% "break_points", "FGA vs Breakpoints", ifelse(cinmetric1 %in% "fga" & cinmetric2 %in% "cna", "FGA vs CNA", ifelse(cinmetric1 %in% "fga" & cinmetric2 %in% "modified_tai", "FGA vs Modified TAI", ifelse(cinmetric1 %in% "fga" & cinmetric2 %in% "tai", "FGA vs TAI", ifelse(cinmetric1 %in% "modified_tai" & cinmetric2 %in% "tai", "Modified TAI vs TAI", "NA"))))))))))))))))
+    
+    # Transforming dataframe to use for heatmap
+    transformed.spearman.df <- filtered.spearman.df %>% select(project, comparison, spearman_rho) %>% pivot_wider(names_from = comparison, values_from = spearman_rho)
+    transformed.spearman.df$project <- str_remove(transformed.spearman.df$project, "TCGA-") 
+    transformed.spearman.df <- column_to_rownames(transformed.spearman.df, var = "project")
+    
+    # Creating Heatmap
+    heatmap.colors <- colorRamp2(c(-1, 0, 1), c("#FED439FF", "#FFFFFF", "#709AE1FF"))
+    normal.cancer.heatmap <- Heatmap(transformed.spearman.df,
+                                    rect_gp = gpar(col = "white", lwd = .5),
+                                    col = heatmap.colors,
+                                    show_column_dend = TRUE,
+                                    show_row_dend = FALSE,
+                                    column_title = "Normal",
+                                    column_title_gp = gpar(fontsize = 10, fontface = "bold"),
+                                    row_names_gp = gpar(fontsize = 10, fontface = "bold"),
+                                    column_names_gp = gpar(fontsize = 10, fontface = "bold"),
+                                    column_names_rot = 45,
+                                    heatmap_legend_param = list(title = "Spearman's Rho", title_gp = gpar(fontsize = 10, fontface = "bold")))
+    return(normal.cancer.heatmap)
+  } 
+  else{
+    stop("Incorrect input for cancer.project. Make sure there are 2 or more cancer projects")
+  }
+}
+
+normal.cancer.heatmap <- get_cinmetrics_cancer_heatmap(all.cinmetrics.df, sample.type = "normal")
+normal.cancer.heatmap
+
+tumor.cancer.heatmap <- get_cinmetrics_cancer_heatmap(all.cinmetrics.df, sample.type = "tumor")
+tumor.cancer.heatmap
 
 
 ```
