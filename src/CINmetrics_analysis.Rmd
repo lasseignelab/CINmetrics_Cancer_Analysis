@@ -457,7 +457,6 @@ library(reshape2)
 ## Creating CINmetrics Dataframe
 ```{r}
 ## Loading the data with all of the CNV data
-
 all.cancer.df <- read.csv('~/Desktop/CINmetrics_Cancer_Analysis/data/processed/all_cancer_df.csv')
 
 ## The function takes the dataframe with all of the CNV data and calculates the CINmetrics. It is merged with the TCGA project name.
@@ -473,7 +472,7 @@ cinmetrics.cancer <- cinmetrics.cancer %>% separate(sample_id, "patient_id", 12,
 all.cinmetrics.df <- inner_join(cinmetrics.cancer, all.cancer.df[,c(7,10,11)], by = c("sample_id" = "Sample")) %>% unique(.) %>% select("sample_id", "patient_id", "project", "sample_type", "tai", "modified_tai", "cna", "base_segments", "break_points", "fga")
 
 ## We store the output as a csv
-all.cinmetrics.df <- write.csv(all.cinmetrics.df, file = here("data", "processed", "all_cinmetrics_df.csv"), row.names = FALSE)
+write.csv(all.cinmetrics.df, file = here("data", "processed", "all_cinmetrics_df.csv"), row.names = FALSE)
 return(all.cinmetrics.df)
 }
 
@@ -489,6 +488,9 @@ get_cinmetrics_stripchart <- function(all.cinmetrics.df){
 # Grouping different sample types by normal and tumor samples
 all.cinmetrics.df$sample_type <- ifelse(all.cinmetrics.df$sample_type %in% c("Blood Derived Normal", "Solid Tissue Normal", "Bone Marrow Normal", "Buccal Cell Normal"), "Normal", all.cinmetrics.df$sample_type)
 all.cinmetrics.df$sample_type  <- ifelse(all.cinmetrics.df$sample_type  %in% c("Metastatic", "Primary Blood Derived Cancer", "Primary Tumor", "Recurrent Tumor", "Additional - New Primary", "Primary Blood Derived Cancer - Peripheral Blood"), "Tumor", all.cinmetrics.df$sample_type )
+
+# Removing TCGA out of project name
+all.cinmetrics.df$project <- str_remove(all.cinmetrics.df$project, "TCGA-") 
 
 # Base Segments Plot
 base.segments.stripchart <- ggstripchart(all.cinmetrics.df,
