@@ -264,3 +264,33 @@ test_stage$group2 <- ifelse(test_stage$group2 %in% "5", "T4", test_stage$group2)
 ##### Save #####
 save(test_stage, file = "/Volumes/G-DRIVEUSB/k99/clinical-corr/data/210713_clinical_analyses_teststage_all.RData")
 ```
+
+-------------------------------------------------------------------
+
+## CINmetrics with Clinical Variables
+
+
+```{r}
+library(tidyverse)
+library(here)
+library(rstatix)
+```
+## CINmetrics with Clinical Variables Dataframe
+```{r}
+## Loading the data with all of the CINmetrics values
+all.cinmetrics.df <- read.csv('~/Desktop/CINmetrics_Cancer_Analysis/data/processed/all_cinmetrics_df.csv')
+
+## This function takes the dataframe with the CINmetrics values and the CNV data and creates a dataframe that will also have the clinical variables associated by Patient ID
+get_tnm <- function(all.cancer.df, all.cinmetrics.df){
+  # Joining clinical variables to the CINmetrics dataframe and filtering out the cancers without TNM data
+  all.tnm.df <- inner_join(all.cinmetrics.df, all.cancer.df[,c(7,13:16)], by = c("sample_id" = "Sample")) %>% unique(.) %>% filter(!project %in% c("TCGA-GBM", "TCGA-LAML", "TCGA-OV", "TCGA-THYM", "TCGA-UCS", "TCGA-DLBC", "TCGA-PCPG", "TCGA-UCEC", "TCGA-SARC", "TCGA-PRAD", "TCGA-LGG")) 
+
+  # We store the output as a csv
+write.csv(all.tnm.df, file = here("data", "processed", "all_tnm_df.csv"), row.names = FALSE)
+  return(all.tnm.df)
+}
+
+all.tnm.df <- get_tnm(all.cancer.df, all.cinmetrics.df)
+```
+
+
