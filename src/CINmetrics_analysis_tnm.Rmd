@@ -297,15 +297,16 @@ all.tnm.df <- get_tnm(all.cancer.df, all.cinmetrics.df)
 ## U-tests for CINmetrics and TNM Stages
 
 ```{r}
-## We create vectors with the 22 cancer names to loop through 
+## We create vectors with the 22 cancer names and 6 CINmetrics to loop through 
 cancer.project <- c("TCGA-KIRC", "TCGA-BRCA", "TCGA-MESO", "TCGA-READ", "TCGA-KIRP", "TCGA-PAAD", "TCGA-ACC", "TCGA-CESC", "TCGA-ESCA", "TCGA-KICH", "TCGA-UVM", "TCGA-SKCM", "TCGA-COAD", "TCGA-LUSC", "TCGA-HNSC", "TCGA-TGCT", "TCGA-THCA", "TCGA-LIHC", "TCGA-BLCA", "TCGA-CHOL", "TCGA-STAD", "TCGA-LUAD")
+
 metrics <- c("tai", "modified_tai", "cna","base_segments", "break_points", "fga")
 
 ## This function takes the all.tnm.df and performs a Mann-Whitney U-test on each of the stages depending on TNM for tumor samples
 get_utest_data <- function(all.tnm.df, cancer.project, tnm.category, metrics){
   if(tnm.category == "tumor.stage"){
     # We create an empty dataframe to store the U-test data
-    tumor.stage.utest <- data.frame(.y. = character(),
+    tumor.stage.utest.df <- data.frame(.y. = character(),
                         group1 = character(),
                         group2 = character(),
                         n1 = numeric(),
@@ -315,32 +316,38 @@ get_utest_data <- function(all.tnm.df, cancer.project, tnm.category, metrics){
                         p.adj = numeric(),
                         p.adj.signif = character())
     
-    for(i in cancer.project){
-    tumor.stage.df <- subset(all.tnm.df, project == i)
-    # Filtering the dataframe to only have the tumor stages and tumor samples we want included in the analysis
+    for(i in 1:length(cancer.project)){
+    tumor.stage.df <- subset(all.tnm.df, project == cancer.project[i])
+    
+    # We filter  the dataframe to only have the tumor stages and tumor samples we want included in the analysis
     tumor.stage.df <- tumor.stage.df %>% select(!c(ajcc_pathologic_m, ajcc_pathologic_n, ajcc_clinical_m)) %>% filter(!(ajcc_pathologic_t %in% c("TX", "Tis", "T0")) & sample_type %in% c("Metastatic", "Primary Blood Derived Cancer", "Primary Tumor", "Recurrent Tumor", "Additional - New Primary", "Primary Blood Derived Cancer - Peripheral Blood")) %>% drop_na(ajcc_pathologic_t)
     tumor.stage.df$ajcc_pathologic_t <- ifelse(tumor.stage.df$ajcc_pathologic_t %in% c("T1a", "T1a1", "T1b", "T1b2", "T1b1", "T1c"), "T1", ifelse(tumor.stage.df$ajcc_pathologic_t %in% c("T2a", "T2b", "T2c", "T2a2", "T2a1", "T2a2"), "T2", ifelse(tumor.stage.df$ajcc_pathologic_t %in% c("T3a", "T3b", "T3c"), "T3", ifelse(tumor.stage.df$ajcc_pathologic_t %in% c("T4a", "T4b", "T4c", "T4d", "T4e"), "T4", tumor.stage.df$ajcc_pathologic_t))))
     
     for(j in metrics){
-    # U-test dataframe
+    # We performed the Mann-Whitney U-test (otherwise known as the Wilcoxon test)
     cinmetrics <- tumor.stage.df[, j]
     tumor_stage <- factor(tumor.stage.df[,"ajcc_pathologic_t"], levels = c("T1", "T2", "T3", "T4"))
     cinmetrics.stage.df <- cbind(cinmetrics, tumor_stage) %>% as.data.frame(.)
     utest.results <- cinmetrics.stage.df %>% wilcox_test(cinmetrics ~ tumor_stage, paired = FALSE, p.adjust.method = "bonferroni")
-    utest.results$project <- i
+    utest.results$project <- cancer.project[i]
     utest.results$cin <- j
-    tumor.stage.utest <- rbind(tumor.stage.utest, utest.results)
+    tumor.stage.utest.df <- rbind(tumor.stage.utest.df, utest.results)
     }
     }
-    tumor.stage.utest <- tumor.stage.utest %>% select(cin, project, group1, group2, n1, n2, statistic, p, p.adj, p.adj.signif)
-    tumor.stage.utest$group1 <- ifelse(tumor.stage.utest$group1 %in% "1", "T1", ifelse(tumor.stage.utest$group1 %in% "2", "T2", ifelse(tumor.stage.utest$group1 %in% "3", "T3", ifelse(tumor.stage.utest$group1 %in% "4", "T4", tumor.stage.utest$group1))))
-    tumor.stage.utest$group2 <- ifelse(tumor.stage.utest$group2 %in% "1", "T1", ifelse(tumor.stage.utest$group2 %in% "2", "T2", ifelse(tumor.stage.utest$group2 %in% "3", "T3", ifelse(tumor.stage.utest$group2 %in% "4", "T4", tumor.stage.utest$group2))))
-    return(tumor.stage.utest)
+    
+    # We changed the group names in the U-test results to match the tumor stage
+    tumor.stage.utest.df <- tumor.stage.utest.df %>% select(cin, project, group1, group2, n1, n2, statistic, p, p.adj, p.adj.signif)
+    tumor.stage.utest.df$group1 <- ifelse(tumor.stage.utest.df$group1 %in% "1", "T1", ifelse(tumor.stage.utest.df$group1 %in% "2", "T2", ifelse(tumor.stage.utest.df$group1 %in% "3", "T3", ifelse(tumor.stage.utest.df$group1 %in% "4", "T4", tumor.stage.utest.df$group1))))
+    tumor.stage.utest.df$group2 <- ifelse(tumor.stage.utest.df$group2 %in% "1", "T1", ifelse(tumor.stage.utest.df$group2 %in% "2", "T2", ifelse(tumor.stage.utest.df$group2 %in% "3", "T3", ifelse(tumor.stage.utest.df$group2 %in% "4", "T4", tumor.stage.utest.df$group2))))
+    
+    # We will store this output in a CSV file 
     write.csv(tumor.stage.utest.df, file = here("data", "processed", "tumor_stage_utest_df.csv"), row.names = FALSE)
+    return(tumor.stage.utest.df)
+    
   } 
   if(tnm.category == "metastasis"){
-    # We create an empty data frames to store the U-test data
-    metastasis.utest <- data.frame(.y. = character(),
+    # We create empty data frames to store the U-test data
+    metastasis.utest.df <- data.frame(.y. = character(),
                         group1 = character(),
                         group2 = character(),
                         n1 = numeric(),
@@ -348,7 +355,7 @@ get_utest_data <- function(all.tnm.df, cancer.project, tnm.category, metrics){
                         p = numeric(),
                         project = character(), 
                         cin = character())
-    acc.metastasis.utest <- data.frame(.y. = character(),
+    acc.metastasis.utest.df <- data.frame(.y. = character(),
                         group1 = character(),
                         group2 = character(),
                         n1 = numeric(),
@@ -359,14 +366,15 @@ get_utest_data <- function(all.tnm.df, cancer.project, tnm.category, metrics){
     
     for(i in 1:length(cancer.project)){
     if(cancer.project[i] != "TCGA-ACC"){
-    # Subset to have the U-test perform on each cancer
+    # We separated the analyses for metastasis data to be dependent on the column it uses
     metastasis.df <- subset(all.tnm.df, project == cancer.project[i])
-    # Filtering the data frame to only have the metastasis data we want included in the analysis
+    
+    # We filter the data frame to only have the metastasis data we want included in the analysis
     metastasis.df <- metastasis.df %>% select(!c(ajcc_pathologic_t, ajcc_pathologic_n, ajcc_clinical_m)) %>% filter(!(ajcc_pathologic_m %in% "MX") & sample_type %in% c("Metastatic", "Primary Blood Derived Cancer", "Primary Tumor", "Recurrent Tumor", "Additional - New Primary", "Primary Blood Derived Cancer - Peripheral Blood")) %>% drop_na()
     metastasis.df$ajcc_pathologic_m <- ifelse(metastasis.df$ajcc_pathologic_m %in% c("cM0 (i+)"), "M0", ifelse(metastasis.df$ajcc_pathologic_m %in% c("M1a", "M1b", "M1c"), "M1", metastasis.df$ajcc_pathologic_m))
     
     for(j in metrics){
-    # U-test dataframe
+    # We performed the Mann-Whitney U-test (otherwise known as the Wilcoxon test)
     cinmetrics <- metastasis.df[, j]
     metastasis <- factor(metastasis.df[,"ajcc_pathologic_m"], levels = c("M0", "M1"))
     cinmetrics.metastasis.df <- cbind(cinmetrics, metastasis) %>% as.data.frame(.)
@@ -375,18 +383,17 @@ get_utest_data <- function(all.tnm.df, cancer.project, tnm.category, metrics){
   
     utest.results$project <- cancer.project[i]
     utest.results$cin <- j
-    metastasis.utest <- rbind(metastasis.utest, utest.results)
+    metastasis.utest.df <- rbind(metastasis.utest.df, utest.results)
     }
     }
      else{
-    # Subset to have the U-test perform on each cancer
     acc.metastasis.df <- subset(all.tnm.df, project == cancer.project[i])
-    # Filtering the data frame to only have the metastasis data we want included in the analysis
+    # We filter the data frame to only have the metastasis data we want included in the analysis
     acc.metastasis.df <- acc.metastasis.df %>% select(!c(ajcc_pathologic_t, ajcc_pathologic_n, ajcc_pathologic_m)) %>% filter(!(ajcc_clinical_m %in% "MX") & sample_type %in% c("Metastatic", "Primary Blood Derived Cancer", "Primary Tumor", "Recurrent Tumor", "Additional - New Primary", "Primary Blood Derived Cancer - Peripheral Blood")) %>% drop_na()
     acc.metastasis.df$ajcc_clinical_m <- ifelse(acc.metastasis.df$ajcc_clinical_m %in% c("cM0 (i+)"), "M0", ifelse(acc.metastasis.df$ajcc_clinical_m %in% c("M1a", "M1b", "M1c"), "M1", acc.metastasis.df$ajcc_clinical_m))
     
     for(j in metrics){
-    # U-test data frame
+    # We performed the Mann-Whitney U-test (otherwise known as the Wilcoxon test)
     acc.cinmetrics <- acc.metastasis.df[, j]
    acc.metastasis <- factor(acc.metastasis.df[,"ajcc_clinical_m"], levels = c("M0", "M1"))
     acc.cinmetrics.metastasis.df <- cbind(acc.cinmetrics, acc.metastasis) %>% as.data.frame(.)
@@ -394,30 +401,119 @@ get_utest_data <- function(all.tnm.df, cancer.project, tnm.category, metrics){
       acc.cinmetrics.metastasis.df %>% wilcox_test(acc.cinmetrics ~ acc.metastasis, p.adjust.method = "none")
     acc.utest.results$project <- cancer.project[i]
     acc.utest.results$cin <- j
-    acc.metastasis.utest <- rbind(acc.metastasis.utest, acc.utest.results)
+    acc.metastasis.utest.df <- rbind(acc.metastasis.utest.df, acc.utest.results)
     }
      }
     }
-    # Cleaning the data frame to have M0 and M1 as group names
-       metastasis.utest <- metastasis.utest %>% select(cin, project, group1, group2, n1, n2, statistic, p)
-   metastasis.utest$group1 <- ifelse(metastasis.utest$group1 %in% "1", "M0", ifelse(metastasis.utest$group1 %in% "2", "M1", metastasis.utest$group1))
-   metastasis.utest$group2 <- ifelse(metastasis.utest$group2 %in% "1", "M0", ifelse(metastasis.utest$group2 %in% "2", "M1", metastasis.utest$group1))
+    # We changed the group names in the U-test results to match the metastasis categories
+    metastasis.utest.df <- metastasis.utest.df %>% select(cin, project, group1, group2, n1, n2, statistic, p)
+   metastasis.utest.df$group1 <- ifelse(metastasis.utest.df$group1 %in% "1", "M0", ifelse(metastasis.utest.df$group1 %in% "2", "M1", metastasis.utest.df$group1))
+   metastasis.utest.df$group2 <- ifelse(metastasis.utest.df$group2 %in% "1", "M0", ifelse(metastasis.utest.df$group2 %in% "2", "M1", metastasis.utest.df$group1))
    
-   acc.metastasis.utest <- acc.metastasis.utest %>% select(cin, project, group1, group2, n1, n2, statistic, p)
-   acc.metastasis.utest$group1 <- ifelse(acc.metastasis.utest$group1 %in% "1", "M0", ifelse(acc.metastasis.utest$group1 %in% "2", "M1", acc.metastasis.utest$group1))
-   acc.metastasis.utest$group2 <- ifelse(acc.metastasis.utest$group2 %in% "1", "M0", ifelse(acc.metastasis.utest$group2 %in% "2", "M1", acc.metastasis.utest$group1))
-   metastasis.utest <- rbind(metastasis.utest, acc.metastasis.utest)
-   return(metastasis.utest)
+   acc.metastasis.utest.df <- acc.metastasis.utest.df %>% select(cin, project, group1, group2, n1, n2, statistic, p)
+   acc.metastasis.utest.df$group1 <- ifelse(acc.metastasis.utest.df$group1 %in% "1", "M0", ifelse(acc.metastasis.utest.df$group1 %in% "2", "M1", acc.metastasis.utest.df$group1))
+   acc.metastasis.utest.df$group2 <- ifelse(acc.metastasis.utest.df$group2 %in% "1", "M0", ifelse(acc.metastasis.utest.df$group2 %in% "2", "M1", acc.metastasis.utest.df$group1))
+   metastasis.utest.df <- rbind(metastasis.utest.df, acc.metastasis.utest.df)
+   
+   # We will store this output in a CSV file 
+   write.csv(metastasis.utest.df, file = here("data", "processed", "metastasis_utest_df.csv"), row.names = FALSE)
+   return(metastasis.utest.df)
+  }  
+
+  if(tnm.category == "node"){
+    # We created empty data frames to store the U-test data
+    node.utest.df <- data.frame(.y. = character(),
+                        group1 = character(),
+                        group2 = character(),
+                        n1 = numeric(),
+                        n2 = numeric(),
+                        statistic = numeric(),
+                        p = numeric(),
+                        project = character(), 
+                        cin = character())
+    node.adjusted.utest <- data.frame(.y. = character(),
+                        group1 = character(),
+                        group2 = character(),
+                        n1 = numeric(),
+                        n2 = numeric(),
+                        p = numeric(),
+                        p.signif = character(),
+                        p.adj = numeric(),
+                        p.adj.signif = character(),
+                        project = character(),
+                        cin = character())
+    
+    for(i in 1:length(cancer.project)){
+    # We separated the analyses for node data to be dependent on the number of lymph node inclusion categories there are
+      
+    if(cancer.project[i] == "TCGA-ACC" || cancer.project[i] == "TCGA-CESC" || cancer.project[i] == "TCGA-CHOL" || cancer.project[i] == "TCGA-KIRC" || cancer.project[i] == "TCGA-LIHC" || cancer.project[i] == "TCGA-PAAD" || cancer.project[i] == "TCGA-THCA"){
+
+    node.df <- subset(all.tnm.df, project == cancer.project[i])
+    
+    # We filtered the data frame to only have the node data we want included in the analysis
+    node.df <- node.df %>% select(!c(ajcc_pathologic_t, ajcc_pathologic_m, ajcc_clinical_m)) %>% filter(!(ajcc_pathologic_n %in% "NX") & sample_type %in% c("Metastatic", "Primary Blood Derived Cancer", "Primary Tumor", "Recurrent Tumor", "Additional - New Primary", "Primary Blood Derived Cancer - Peripheral Blood")) %>% drop_na()
+  
+    node.df$ajcc_pathologic_n <- ifelse(node.df$ajcc_pathologic_n %in% c("N0 (i+)", "N0 (i-)", "N0 (mol+)"), "N0", ifelse(node.df$ajcc_pathologic_n %in% c("N1mi", "N1a", "N1b", "N1c"), "N1", ifelse(node.df$ajcc_pathologic_n %in% c("N2a", "N2b", "N2c"), "N2", ifelse(node.df$ajcc_pathologic_n %in% c("N3a", "N3b", "N3c"), "N3", node.df$ajcc_pathologic_n))))
+
+    for(j in metrics){
+    # We performed the Mann-Whitney U-test (otherwise known as the Wilcoxon test)
+    cinmetrics <- node.df[, j]
+    node <- factor(node.df[,"ajcc_pathologic_n"], levels = c("N0", "N1"))
+    cinmetrics.node.df <- cbind(cinmetrics, node) %>% as.data.frame(.)
+    utest.results <- 
+      cinmetrics.node.df %>% wilcox_test(cinmetrics ~ node, p.adjust.method = "none")
+    utest.results$project <- cancer.project[i]
+    utest.results$cin <- j
+    node.utest.df <- rbind(node.utest.df, utest.results)
+    }
+    }
+      if(cancer.project[i] == "TCGA-COAD" || cancer.project[i] == "TCGA-KICH" || cancer.project[i] == "TCGA-KIRP" || cancer.project[i] == "TCGA-READ" || cancer.project[i] == "TCGA-TGCT" || cancer.project[i] == "TCGA-BLCA" || cancer.project[i] == "TCGA-BRCA" || cancer.project[i] == "TCGA-ESCA" || cancer.project[i] == "TCGA-HNSC" || cancer.project[i] == "TCGA-LUAD" || cancer.project[i] == "TCGA-LUSC" || cancer.project[i] == "TCGA-MESO" || cancer.project[i] == "TCGA-STAD" || cancer.project[i] == "TCGA-SKCM"){
+        
+    node.df <- subset(all.tnm.df, project == cancer.project[i])
+    
+    # we filtered the data frame to only have the node data we want included in the analysis
+    node.df <- node.df %>% select(!c(ajcc_pathologic_t, ajcc_pathologic_m, ajcc_clinical_m)) %>% filter(!(ajcc_pathologic_n %in% "NX") & sample_type %in% c("Metastatic", "Primary Blood Derived Cancer", "Primary Tumor", "Recurrent Tumor", "Additional - New Primary", "Primary Blood Derived Cancer - Peripheral Blood")) %>% drop_na()
+  
+    node.df$ajcc_pathologic_n <- ifelse(node.df$ajcc_pathologic_n %in% c("N0 (i+)", "N0 (i-)", "N0 (mol+)"), "N0", ifelse(node.df$ajcc_pathologic_n %in% c("N1mi", "N1a", "N1b", "N1c"), "N1", ifelse(node.df$ajcc_pathologic_n %in% c("N2a", "N2b", "N2c"), "N2", ifelse(node.df$ajcc_pathologic_n %in% c("N3a", "N3b", "N3c"), "N3", node.df$ajcc_pathologic_n))))
+
+    for(j in metrics){
+    # We performed the Mann-Whitney U-test (otherwise known as the Wilcoxon test)
+    cinmetrics <- node.df[, j]
+    node <- factor(node.df[,"ajcc_pathologic_n"], levels = c("N0", "N1", "N2", "N3"))
+    cinmetrics.node.df <- cbind(cinmetrics, node) %>% as.data.frame(.)
+    utest.results <- 
+      cinmetrics.node.df %>% 
+      wilcox_test(cinmetrics ~ node, paired = FALSE, p.adjust.method = "bonferroni")
+    utest.results$project <- cancer.project[i]
+    utest.results$cin <- j
+    node.adjusted.utest <- rbind(node.adjusted.utest, utest.results)
+    }
+      } 
+      else{
+    # Skipping over the cancers that does not have enough node data for U-tests (like TCGA-UVM)
+        next
+      }
+    }
+    # We combined both of the node U-test data frames
+    node.utest.df <- node.utest.df %>% add_column(p.adj = NA) %>% add_column(p.adj.signif = NA) %>% select(cin, project, group1, group2, n1, n2, statistic, p, p.adj, p.adj.signif)
+    node.adjusted.utest <- node.adjusted.utest %>% select(cin, project, group1, group2, n1, n2, statistic, p, p.adj, p.adj.signif)
+    node.utest.df <- rbind(node.utest.df, node.adjusted.utest) %>% as.data.frame()
+    
+    # We changed the group names in the U-test results to match the node categories
+   node.utest.df$group1 <- ifelse(node.utest.df$group1 %in% "1", "N0", ifelse(node.utest.df$group1 %in% "2", "N1", ifelse(node.utest.df$group1 %in% "3", "N2", node.utest.df$group1)))
+   node.utest.df$group2 <- ifelse(node.utest.df$group2 %in% "2", "N1", ifelse(node.utest.df$group2 %in% "3", "N2", ifelse(node.utest.df$group2 %in% "4", "N3", node.utest.df$group1)))
+   
+   # We will store this output in a CSV file 
+   write.csv(node.utest.df, file = here("data", "processed", "node_utest_df.csv"), row.names = FALSE)
+   return(node.utest.df)
   }
   else{
     stop("Incorrect input for tnm.category. Make sure you pick 'tumor.stage', 'metastasis', or 'node'")
   }
-}
+  }
 
-
-
-tumor.stage.utest <- get_utest_data(all.tnm.df, cancer.project, tnm.category = "tumor.stage", metrics)
-metastasis.utest <- get_utest_data(all.tnm.df, cancer.project, tnm.category = "metastasis", metrics)
-node.utest <- get_utest_data(all.tnm.df, cancer.project, tnm.category = "node", metrics)
+tumor.stage.utest.df <- get_utest_data(all.tnm.df, cancer.project, tnm.category = "tumor.stage", metrics)
+metastasis.utest.df <- get_utest_data(all.tnm.df, cancer.project, tnm.category = "metastasis", metrics)
+node.utest.df <- get_utest_data(all.tnm.df, cancer.project, tnm.category = "node", metrics)
 
 ```
