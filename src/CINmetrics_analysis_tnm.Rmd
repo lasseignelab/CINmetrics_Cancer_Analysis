@@ -299,15 +299,9 @@ all.tnm.df <- get_tnm(all.cancer.df, all.cinmetrics.df)
 ```{r}
 ## We create vectors with the 22 cancer names to loop through 
 cancer.project <- c("TCGA-KIRC", "TCGA-BRCA", "TCGA-MESO", "TCGA-READ", "TCGA-KIRP", "TCGA-PAAD", "TCGA-ACC", "TCGA-CESC", "TCGA-ESCA", "TCGA-KICH", "TCGA-UVM", "TCGA-SKCM", "TCGA-COAD", "TCGA-LUSC", "TCGA-HNSC", "TCGA-TGCT", "TCGA-THCA", "TCGA-LIHC", "TCGA-BLCA", "TCGA-CHOL", "TCGA-STAD", "TCGA-LUAD")
-
-## for metastasis
-
-cancer.project <- c("TCGA-KIRC", "TCGA-BRCA", "TCGA-MESO", "TCGA-READ", "TCGA-KIRP", "TCGA-PAAD", "TCGA-CESC", "TCGA-ESCA", "TCGA-KICH", "TCGA-UVM", "TCGA-SKCM", "TCGA-COAD", "TCGA-LUSC", "TCGA-HNSC", "TCGA-TGCT", "TCGA-THCA", "TCGA-LIHC", "TCGA-BLCA", "TCGA-CHOL", "TCGA-STAD", "TCGA-LUAD")
-
-
 metrics <- c("tai", "modified_tai", "cna","base_segments", "break_points", "fga")
 
-## This function takes the all.tnm.df and performs a Mann-Whitney U-test on each of the stages depending on TNM 
+## This function takes the all.tnm.df and performs a Mann-Whitney U-test on each of the stages depending on TNM for tumor samples
 get_utest_data <- function(all.tnm.df, cancer.project, tnm.category, metrics){
   if(tnm.category == "tumor.stage"){
     # We create an empty dataframe to store the U-test data
@@ -322,7 +316,6 @@ get_utest_data <- function(all.tnm.df, cancer.project, tnm.category, metrics){
                         p.adj.signif = character())
     
     for(i in cancer.project){
-      
     tumor.stage.df <- subset(all.tnm.df, project == i)
     # Filtering the dataframe to only have the tumor stages and tumor samples we want included in the analysis
     tumor.stage.df <- tumor.stage.df %>% select(!c(ajcc_pathologic_m, ajcc_pathologic_n, ajcc_clinical_m)) %>% filter(!(ajcc_pathologic_t %in% c("TX", "Tis", "T0")) & sample_type %in% c("Metastatic", "Primary Blood Derived Cancer", "Primary Tumor", "Recurrent Tumor", "Additional - New Primary", "Primary Blood Derived Cancer - Peripheral Blood")) %>% drop_na(ajcc_pathologic_t)
@@ -344,20 +337,32 @@ get_utest_data <- function(all.tnm.df, cancer.project, tnm.category, metrics){
     tumor.stage.utest$group2 <- ifelse(tumor.stage.utest$group2 %in% "1", "T1", ifelse(tumor.stage.utest$group2 %in% "2", "T2", ifelse(tumor.stage.utest$group2 %in% "3", "T3", ifelse(tumor.stage.utest$group2 %in% "4", "T4", tumor.stage.utest$group2))))
     return(tumor.stage.utest)
     write.csv(tumor.stage.utest.df, file = here("data", "processed", "tumor_stage_utest_df.csv"), row.names = FALSE)
-  return(all.tnm.df)
   } 
   if(tnm.category == "metastasis"){
-    # We create an empty dataframe to store the U-test data
+    # We create an empty data frames to store the U-test data
     metastasis.utest <- data.frame(.y. = character(),
                         group1 = character(),
                         group2 = character(),
                         n1 = numeric(),
                         n2 = numeric(),
-                        p = numeric())
-    for(i in cancer.project){
-    metastasis.df <- subset(all.tnm.df, project == i)
-    # Filtering the dataframe to only have the metastasis data we want included in the analysis
-    metastasis.df <- metastasis.df %>% select(!c(ajcc_pathologic_t, ajcc_pathologic_n, ajcc_clinical_m)) %>% filter(!(ajcc_pathologic_m %in% "MX") & sample_type %in% c("Metastatic", "Primary Blood Derived Cancer", "Primary Tumor", "Recurrent Tumor", "Additional - New Primary", "Primary Blood Derived Cancer - Peripheral Blood")) %>% drop_na(ajcc_pathologic_m)
+                        p = numeric(),
+                        project = character(), 
+                        cin = character())
+    acc.metastasis.utest <- data.frame(.y. = character(),
+                        group1 = character(),
+                        group2 = character(),
+                        n1 = numeric(),
+                        n2 = numeric(),
+                        p = numeric(),
+                        project = character(), 
+                        cin = character())
+    
+    for(i in 1:length(cancer.project)){
+    if(cancer.project[i] != "TCGA-ACC"){
+    # Subset to have the U-test perform on each cancer
+    metastasis.df <- subset(all.tnm.df, project == cancer.project[i])
+    # Filtering the data frame to only have the metastasis data we want included in the analysis
+    metastasis.df <- metastasis.df %>% select(!c(ajcc_pathologic_t, ajcc_pathologic_n, ajcc_clinical_m)) %>% filter(!(ajcc_pathologic_m %in% "MX") & sample_type %in% c("Metastatic", "Primary Blood Derived Cancer", "Primary Tumor", "Recurrent Tumor", "Additional - New Primary", "Primary Blood Derived Cancer - Peripheral Blood")) %>% drop_na()
     metastasis.df$ajcc_pathologic_m <- ifelse(metastasis.df$ajcc_pathologic_m %in% c("cM0 (i+)"), "M0", ifelse(metastasis.df$ajcc_pathologic_m %in% c("M1a", "M1b", "M1c"), "M1", metastasis.df$ajcc_pathologic_m))
     
     for(j in metrics){
@@ -365,27 +370,54 @@ get_utest_data <- function(all.tnm.df, cancer.project, tnm.category, metrics){
     cinmetrics <- metastasis.df[, j]
     metastasis <- factor(metastasis.df[,"ajcc_pathologic_m"], levels = c("M0", "M1"))
     cinmetrics.metastasis.df <- cbind(cinmetrics, metastasis) %>% as.data.frame(.)
-    utest.results <- cinmetrics.metastasis.df %>% wilcox_test(cinmetrics ~ metastasis, paired = FALSE, p.adjust.method = "none")
-    utest.results$project <- i
+    utest.results <- 
+      cinmetrics.metastasis.df %>% wilcox_test(cinmetrics ~ metastasis, p.adjust.method = "none")
+  
+    utest.results$project <- cancer.project[i]
     utest.results$cin <- j
     metastasis.utest <- rbind(metastasis.utest, utest.results)
     }
     }
-    metastasis.utest <- metastasis.utest %>% select(cin, project, group1, group2, n1, n2, statistic, p)
-    metastasis.utest$group1 <- ifelse(metastasis.utest$group1 %in% "1", "M0", ifelse(metastasis.utest$group1 %in% "2", "M1", metastasis.utest$group1))
-    metastasis.utest$group2 <- ifelse(metastasis.utest$group2 %in% "1", "M0", ifelse(metastasis.utest$group2 %in% "2", "M1", metastasis.utest$group1))
-    return(metastasis.utest)
+     else{
+    # Subset to have the U-test perform on each cancer
+    acc.metastasis.df <- subset(all.tnm.df, project == cancer.project[i])
+    # Filtering the data frame to only have the metastasis data we want included in the analysis
+    acc.metastasis.df <- acc.metastasis.df %>% select(!c(ajcc_pathologic_t, ajcc_pathologic_n, ajcc_pathologic_m)) %>% filter(!(ajcc_clinical_m %in% "MX") & sample_type %in% c("Metastatic", "Primary Blood Derived Cancer", "Primary Tumor", "Recurrent Tumor", "Additional - New Primary", "Primary Blood Derived Cancer - Peripheral Blood")) %>% drop_na()
+    acc.metastasis.df$ajcc_clinical_m <- ifelse(acc.metastasis.df$ajcc_clinical_m %in% c("cM0 (i+)"), "M0", ifelse(acc.metastasis.df$ajcc_clinical_m %in% c("M1a", "M1b", "M1c"), "M1", acc.metastasis.df$ajcc_clinical_m))
+    
+    for(j in metrics){
+    # U-test data frame
+    acc.cinmetrics <- acc.metastasis.df[, j]
+   acc.metastasis <- factor(acc.metastasis.df[,"ajcc_clinical_m"], levels = c("M0", "M1"))
+    acc.cinmetrics.metastasis.df <- cbind(acc.cinmetrics, acc.metastasis) %>% as.data.frame(.)
+    acc.utest.results <- 
+      acc.cinmetrics.metastasis.df %>% wilcox_test(acc.cinmetrics ~ acc.metastasis, p.adjust.method = "none")
+    acc.utest.results$project <- cancer.project[i]
+    acc.utest.results$cin <- j
+    acc.metastasis.utest <- rbind(acc.metastasis.utest, acc.utest.results)
+    }
+     }
+    }
+    # Cleaning the data frame to have M0 and M1 as group names
+       metastasis.utest <- metastasis.utest %>% select(cin, project, group1, group2, n1, n2, statistic, p)
+   metastasis.utest$group1 <- ifelse(metastasis.utest$group1 %in% "1", "M0", ifelse(metastasis.utest$group1 %in% "2", "M1", metastasis.utest$group1))
+   metastasis.utest$group2 <- ifelse(metastasis.utest$group2 %in% "1", "M0", ifelse(metastasis.utest$group2 %in% "2", "M1", metastasis.utest$group1))
+   
+   acc.metastasis.utest <- acc.metastasis.utest %>% select(cin, project, group1, group2, n1, n2, statistic, p)
+   acc.metastasis.utest$group1 <- ifelse(acc.metastasis.utest$group1 %in% "1", "M0", ifelse(acc.metastasis.utest$group1 %in% "2", "M1", acc.metastasis.utest$group1))
+   acc.metastasis.utest$group2 <- ifelse(acc.metastasis.utest$group2 %in% "1", "M0", ifelse(acc.metastasis.utest$group2 %in% "2", "M1", acc.metastasis.utest$group1))
+   metastasis.utest <- rbind(metastasis.utest, acc.metastasis.utest)
+   return(metastasis.utest)
   }
-
-else{
+  else{
     stop("Incorrect input for tnm.category. Make sure you pick 'tumor.stage', 'metastasis', or 'node'")
   }
 }
 
-#tumor.stage.utest <- get_utest_data(all.tnm.df, cancer.project, tnm.category = "tumor.stage", metrics)
 
+
+tumor.stage.utest <- get_utest_data(all.tnm.df, cancer.project, tnm.category = "tumor.stage", metrics)
 metastasis.utest <- get_utest_data(all.tnm.df, cancer.project, tnm.category = "metastasis", metrics)
-
 node.utest <- get_utest_data(all.tnm.df, cancer.project, tnm.category = "node", metrics)
 
 ```
