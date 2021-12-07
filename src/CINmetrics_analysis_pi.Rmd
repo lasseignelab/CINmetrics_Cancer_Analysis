@@ -96,4 +96,247 @@ ggscatter(metricindex, x = "cna.3", y = "PI", size = .4,
 dev.off()
 ```
 
+-------------------------------------------------------------
+# CINmetrics and PI analysis
+
+
+```{r}
+library(TCGAbiolinks)
+library(tidyverse)
+library(DESeq2)
+library(AnnotationDbi)
+library(EnsDb.Hsapiens.v75)
+library(ProliferativeIndex)
+library(here)
+library(ggpubr)
+library(readr)
+```
+
+
+## Downloading gene expression data
+```{r}
+
+## We create a vector with 33 cancer names to loop through
+cancer.project <- c("TCGA-KIRC", "TCGA-BRCA", "TCGA-SARC", "TCGA-MESO", "TCGA-READ", "TCGA-KIRP", "TCGA-PAAD", "TCGA-GBM", "TCGA-ACC", "TCGA-CESC", "TCGA-ESCA", "TCGA-DLBC", "TCGA-KICH", "TCGA-UVM", "TCGA-LAML", "TCGA-SKCM", "TCGA-PCPG", "TCGA-COAD", "TCGA-UCS", "TCGA-LUSC", "TCGA-LGG", "TCGA-HNSC", "TCGA-TGCT", "TCGA-THCA", "TCGA-LIHC", "TCGA-BLCA", "TCGA-UCEC", "TCGA-PRAD", "TCGA-OV", "TCGA-THYM", "TCGA-CHOL", "TCGA-STAD", "TCGA-LUAD")
+
+## The function takes cancer project name as defined in TCGAbiolinks package and returns maskCNV data ## merged with selected clinical variable data as well few extra variables (patient, tumor, project, ## type) 
+get_gex_data <- function(cancer.project){
+  query.cancer <- GDCquery(project = cancer.project,
+              data.category = "Transcriptome Profiling",
+             data.type = "Gene Expression Quantification",
+             workflow.type = "HTSeq - Counts",
+             legacy=FALSE)
+  GDCdownload(query = query.cancer)
+  gex.cancer <- GDCprepare(query = query.cancer, summarizedExperiment = TRUE)
+  return(gex.cancer)
+}
+
+## We create an empty list and loop through all the cancer projects and store the output in a R Data file
+
+all.gex.list <- list(stingAsFactors = FALSE)
+for (i in 1:length(cancer.project)){
+  all.gex.list <- append(all.gex.list, get_gex_data(cancer.project[i]))
+}
+
+all.gex.list[[1]] <- NULL
+names(all.gex.list) <- cancer.project
+
+save(all.gex.list, file = here("data", "processed", "all.gex.list.RData"))
+
+```
+
+```{r}
+# We create a vector with the 19 cancers used in the Proliferative Index paper that the function will loop through
+
+load(all.gex.list)
+all.cinmetrics.df <- read.csv("/data/project/lasseigne_lab/SashaThalluri/CINmetrics_Cancer_Analysis/data/processed/all_cinmetrics_df.csv")
+
+cancer.project <- c("TCGA-CESC", "TCGA-LUSC", "TCGA-BLCA", "TCGA-OV", "TCGA-ESCA", "TCGA-LAML", "TCGA-HNSC", "TCGA-STAD", "TCGA-SARC", "TCGA-GBM", "TCGA-BRCA", "TCGA-LUAD", "TCGA-MESO", "TCGA-ACC", "TCGA-PAAD", "TCGA-LIHC", "TCGA-KIRC", "TCGA-LGG", "TCGA-KIRP")
+  
+# We will create a function that creates a dataframe with the tumor CINmetrics values and the matched tumor ProliferativeIndex values
+
+get_pi_df <- function(all.gex.list, cancer.project){
+  # Creates a data frame to hold the proliferative indices for the 19 cancers
+  all.pi.df <- data.frame("sample_id" = colnames(assays(all.gex.list[[1]])$`HTSeq - Counts`))
+  
+  # These are the odel IDs used for the Proliferative Index package
+model.ids <- c("AIFM3", "ATP9B", "CTRC", "MCL1", "MGAT4B", "ODF2L", "SNORA65", "TPPP2")
+
+  # This creates a matrix with all of cancer names, samples, and PIs
+for (i in 1:length(cancer.project)) {
+    cancer.assay <- assays(all.gex.list[[cancer.project[i]]])$'HTSeq - Counts'
+    cancer.vst <- data.frame(vst(cancer.assay, blind = TRUE))
+    cancer.ids <- data.frame("hgnc" = mapIds(EnsDb.Hsapiens.v75, keys=rownames(cancer.vst), column="SYMBOL", keytype= "GENEID"),stringsAsFactors = FALSE)
+    cancer.vst <- rownames_to_column(cancer.vst, var = "ensembl_id") 
+    cancer.ids <- rownames_to_column(cancer.ids, var = "ensembl_conversion")
+    cancer.join <- inner_join(cancer.vst, cancer.ids, by = c("ensembl_id" = "ensembl_conversion")) %>% dplyr::select(-ensembl_id)
+    cancer.temp <- aggregate(. ~ hgnc, data = cancer.join, FUN=median)
+    cancer.temp <- column_to_rownames(cancer.temp, var="hgnc")
+    cancer.read <-readDataForPI(cancer.temp, model.ids)
+    proliferative.indices <- calculatePI(cancer.read) %>% data.frame()
+    colnames(proliferative.indices) <- cancer.project[i]
+    proliferative.indices <- rownames_to_column(proliferative.indices, var = "sample_id")
+    all.pi.df <- full_join(all.pi.df, proliferative.indices, by = c("sample_id"))
+}
+# Creates a dataframe with PI values, sample ID, and project 
+all.pi.df <- all.pi.df %>% pivot_longer(!sample_id, names_to = "project", values_to = "pi") %>% drop_na()
+write.csv(all.pi.df, file = here("data", "processed", "all_pi_df.csv"), row.names = FALSE)
+
+# Creates a dataframe with CIN metrics and PI
+all.pi.df$sample_vial <- substr(all.pi.df$sample_id, 1, nchar(all.pi.df$sample_id)-12) 
+all.pi.df <- all.pi.df %>% dplyr::select(sample_id, sample_vial, project, pi)
+
+all.cinmetrics.df$sample_vial <- substr(all.cinmetrics.df$sample_id, 1, nchar(all.cinmetrics.df$sample_id)-12)
+all.cinmetrics.df <- all.cinmetrics.df %>% dplyr::select(sample_id, sample_vial, patient_id, project, sample_type, tai, modified_tai, cna, base_segments, break_points, fga)
+all.cinmetrics.df$sample_vial <- gsub("-", ".", all.cinmetrics.df$sample_vial)
+
+all.cinmetrics.pi.df <- all.pi.df %>% dplyr::select(sample_vial, pi) %>% left_join(all.cinmetrics.df, ., by = "sample_vial") %>% drop_na()
+
+tumor.cinmetrics.pi.df <- dplyr::filter(all.cinmetrics.pi.df, sample_type != "Solid Tissue Normal")
+
+write.csv(tumor.cinmetrics.pi.df, file = here("data", "processed", "tumor_cinmetrics_pi_df.csv"), row.names = FALSE)
+return(tumor.cinmetrics.pi.df)
+}
+
+tumor.cinmetrics.pi.df <- get_pi_df(all.gex.list, cancer.project)
+
+```
+
+```{r}
+# Loading in breast cancer subtypes 
+breast.subtypes <- read_csv("data/raw/breastsubtypes.csv")
+
+# We create a function that plots the Spearman's correlation between each CINmetric and the PI in the 19 cancers
+get_cinmetrics_pi_corr <- function(tumor.cinmetrics.pi.df){
+# Log10 transformation of CINmetrics values
+tumor.pi.df <- tumor.cinmetrics.pi.df %>% dplyr::select(sample_id, sample_vial, patient_id, project, sample_type, pi)
+  
+log.tumor.cinmetrics.df <- tumor.cinmetrics.pi.df %>% dplyr::select(tai, modified_tai, cna, base_segments, break_points, fga) %>% sapply(., log10) 
+
+log.tumor.cinmetrics.pi.df <- cbind(tumor.pi.df, log.tumor.cinmetrics.df)
+
+# Subset BRCA and LAML and include BRCA subtypes
+
+brca.laml.log.cinmetrics.pi.df <- log.tumor.cinmetrics.pi.df %>% dplyr::filter(., project == "TCGA-BRCA" | project == "TCGA-LAML")
+
+breast.subtypes <- subset(breast.subtypes, select = c("Complete TCGA ID", "PAM50 mRNA"))
+
+brca.laml.subtypes.cinmetrics.pi.df  <- full_join(brca.laml.log.cinmetrics.pi.df, breast.subtypes, by = c("patient_id" = "Complete TCGA ID")) %>%
+  rename("breast_subtype" = "PAM50 mRNA") %>% drop_na(project) 
+
+brca.laml.subtypes.cinmetrics.pi.df$breast_subtype <- replace(brca.laml.subtypes.cinmetrics.pi.df$breast_subtype, is.na(brca.laml.subtypes.cinmetrics.pi.df$breast_subtype), "Not Reported")
+
+
+# FGA v pi Plot
+fga.spearmans.corr <- ggscatter(brca.laml.subtypes.cinmetrics.pi.df, 
+                                x = "fga", 
+                                y = "pi", 
+                                size = .5,
+                                shape = "breast_subtype",
+                                rug = TRUE, 
+                                add = "none", 
+                                conf.int = FALSE, 
+                                color = "project", 
+                                palette = "lancet", 
+                                xlab = "log10(FGA)",
+                                ylab = "Proliferative Index") +
+  stat_cor(aes(color = project), 
+           method = "spearman") + scale_shape_manual(values = c(15, 4, 17, 25, 19, 18))
+
+
+
+break.points.spearmans.corr <- ggscatter(brca.laml.subtypes.cinmetrics.pi.df, 
+                                x = "break_points", 
+                                y = "pi", 
+                                size = 1,
+                                shape = "breast_subtype",
+                                rug = TRUE, 
+                                add = "none", 
+                                conf.int = FALSE, 
+                                color = "project", 
+                                palette = "lancet", 
+                                xlab = "log10(Break Points)",
+                                ylab = "Proliferative Index") +
+  stat_cor(aes(color = project), 
+           method = "spearman") + scale_shape_manual(values = c(15, 4, 17, 25, 19, 18))
+
+base.segments.spearmans.corr <- ggscatter(brca.laml.subtypes.cinmetrics.pi.df, 
+                                x = "base_segments", 
+                                y = "pi", 
+                                size = 1, 
+                                shape = "breast_subtype",
+                                rug = TRUE, 
+                                add = "none", 
+                                conf.int = FALSE, 
+                                color = "project", 
+                                palette = "lancet", 
+                                xlab = "log10(Base Segments)",
+                                ylab = "Proliferative Index") +
+  stat_cor(aes(color = project), 
+           method = "spearman") + scale_shape_manual(values = c(15, 4, 17, 25, 19, 18))
+
+
+tai.spearmans.corr <- ggscatter(brca.laml.subtypes.cinmetrics.pi.df, 
+                                x = "tai", 
+                                y = "pi", 
+                                size = 1, 
+                                shape = "breast_subtype",
+                                rug = TRUE, 
+                                add = "none", 
+                                conf.int = FALSE, 
+                                color = "project", 
+                                palette = "lancet", 
+                                xlab = "log10(TAI)",
+                                ylab = "Proliferative Index") +
+  stat_cor(aes(color = project), 
+           method = "spearman") + scale_shape_manual(values = c(15, 4, 17, 25, 19, 18))
+
+
+modified.tai.spearmans.corr <- ggscatter(brca.laml.subtypes.cinmetrics.pi.df, 
+                                x = "modified_tai", 
+                                y = "pi", 
+                                size = 1, 
+                                shape = "breast_subtype",
+                                rug = TRUE, 
+                                add = "none", 
+                                conf.int = FALSE, 
+                                color = "project", 
+                                palette = "lancet", 
+                                xlab = "log10(Modified TAI)",
+                                ylab = "Proliferative Index") +
+  stat_cor(aes(color = project), 
+           method = "spearman") + scale_shape_manual(values = c(15, 4, 17, 25, 19, 18))
+
+cna.spearmans.corr <- ggscatter(brca.laml.subtypes.cinmetrics.pi.df, 
+                                x = "cna", 
+                                y = "pi", 
+                                size = 1, 
+                                shape = "breast_subtype",
+                                rug = TRUE, 
+                                add = "none", 
+                                conf.int = FALSE, 
+                                color = "project", 
+                                palette = "lancet", 
+                                xlab = "log10(CNA)",
+                                ylab = "Proliferative Index") +
+  stat_cor(aes(color = project), 
+           method = "spearman") + scale_shape_manual(values = c(15, 4, 17, 25, 19, 18))
+
+# CINmetrics Plot
+cinmetrics.spearmans.corr <- ggarrange(base.segments.spearmans.corr, 
+                                   break.points.spearmans.corr, 
+                                   tai.spearmans.corr, 
+                                   fga.spearmans.corr, 
+                                   cna.spearmans.corr,
+                                   modified.tai.spearmans.corr, 
+                                   ncol = 3, nrow = 2, 
+                                   legend = "right",
+                                   common.legend = TRUE)
+return(cinmetrics.spearmans.corr)
+}
+
+cinmetrics_pi_corr <- get_cinmetrics_pi_corr(tumor.cinmetrics.pi.df)
+cinmetrics_pi_corr
+```
+
 
