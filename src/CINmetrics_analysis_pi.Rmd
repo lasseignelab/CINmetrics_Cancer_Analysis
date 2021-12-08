@@ -339,4 +339,146 @@ cinmetrics_pi_corr <- get_cinmetrics_pi_corr(tumor.cinmetrics.pi.df)
 cinmetrics_pi_corr
 ```
 
+```{r}
+# Loading in breast cancer subtypes and CINmetrics and PI df
+breast.subtypes <- read_csv("data/raw/breastsubtypes.csv")
+tumor.cinmetrics.pi.df <- read_csv("data/processed/tumor_cinmetrics_pi_df.csv")
 
+# We create a function that plots the Spearman's correlation between each CINmetric and the PI in the 19 cancers for BRCA PAM50 subtypes 
+get_subtypes_corr <- function(tumor.cinmetrics.pi.df){
+# Log10 transformation of CINmetrics values
+tumor.df <- tumor.cinmetrics.pi.df %>% dplyr::select(sample_id, sample_vial, patient_id, project, sample_type)
+  
+log.tumor.cinmetrics.pi.df <- tumor.cinmetrics.pi.df %>% dplyr::select(tai, modified_tai, cna, base_segments, break_points, fga, pi) %>% sapply(., log10) 
+
+log.tumor.cinmetrics.pi.df <- cbind(tumor.df, log.tumor.cinmetrics.pi.df)
+
+# Subset BRCA with BRCA subtypes
+
+brca.log.cinmetrics.pi.df <- log.tumor.cinmetrics.pi.df %>% dplyr::filter(., project == "TCGA-BRCA")
+
+breast.subtypes <- subset(breast.subtypes, select = c("Complete TCGA ID", "PAM50 mRNA"))
+
+brca.subtypes.cinmetrics.pi.df  <- full_join(brca.log.cinmetrics.pi.df, breast.subtypes, by = c("patient_id" = "Complete TCGA ID")) %>%
+  dplyr::rename("breast_subtype" = "PAM50 mRNA") %>% drop_na(project) 
+
+brca.subtypes.cinmetrics.pi.df$breast_subtype <- replace(brca.subtypes.cinmetrics.pi.df$breast_subtype, is.na(brca.subtypes.cinmetrics.pi.df$breast_subtype), "Not Reported")
+
+
+# FGA v pi Plot
+fga.spearmans.corr <- ggscatter(brca.subtypes.cinmetrics.pi.df, 
+                                x = "fga", 
+                                y = "pi", 
+                                size = .7,
+                                shape = 20,
+                                alpha = .7,
+                                rug = TRUE, 
+                                add = "none", 
+                                conf.int = FALSE, 
+                                color = "breast_subtype", 
+                                palette = "uchicago", 
+                                xlab = "log10(FGA)",
+                                ylab = "log10(Proliferative Index)") +
+  stat_cor(aes(color = breast_subtype), 
+           method = "spearman", size = 3, label.x.npc = "left") 
+
+
+
+break.points.spearmans.corr <- ggscatter(brca.subtypes.cinmetrics.pi.df, 
+                                x = "break_points", 
+                                y = "pi", 
+                                size = .7,
+                                shape = 20,
+                                alpha = .7,
+                                rug = TRUE, 
+                                add = "none", 
+                                conf.int = FALSE, 
+                                color = "breast_subtype", 
+                                palette = "uchicago", 
+                                xlab = "log10(Break Points)",
+                                ylab = "log10(Proliferative Index)") +
+  stat_cor(aes(color = breast_subtype), 
+           method = "spearman", size = 3, label.x.npc = "left") 
+
+base.segments.spearmans.corr <- ggscatter(brca.subtypes.cinmetrics.pi.df, 
+                                x = "base_segments", 
+                                y = "pi", 
+                                size = .7,
+                                shape = 20,
+                                alpha = .7,
+                                rug = TRUE, 
+                                add = "none", 
+                                conf.int = FALSE, 
+                                color = "breast_subtype", 
+                                palette = "uchicago", 
+                                xlab = "log10(Base Segments)",
+                                ylab = "log10(Proliferative Index)") +
+  stat_cor(aes(color = breast_subtype), 
+           method = "spearman", size = 3, label.x.npc = "left") 
+
+
+tai.spearmans.corr <- ggscatter(brca.subtypes.cinmetrics.pi.df, 
+                                x = "tai", 
+                                y = "pi", 
+                                size = .7, 
+                                shape = 20,
+                                alpha = .7,
+                                rug = TRUE, 
+                                add = "none", 
+                                conf.int = FALSE, 
+                                color = "breast_subtype", 
+                                palette = "uchicago", 
+                                xlab = "log10(TAI)",
+                                ylab = "log10(Proliferative Index)") +
+  stat_cor(aes(color = breast_subtype), 
+           method = "spearman", size = 3, label.x.npc = "center") 
+
+
+modified.tai.spearmans.corr <- ggscatter(brca.subtypes.cinmetrics.pi.df, 
+                                x = "modified_tai", 
+                                y = "pi", 
+                                size = .7, 
+                                shape = 20,
+                                alpha = .7,
+                                rug = TRUE, 
+                                add = "none", 
+                                conf.int = FALSE, 
+                                color = "breast_subtype", 
+                                palette = "uchicago", 
+                                xlab = "log10(Modified TAI)",
+                                ylab = "log10(Proliferative Index)") +
+  stat_cor(aes(color = breast_subtype), 
+           method = "spearman", size = 3, label.x.npc = "left") 
+
+cna.spearmans.corr <- ggscatter(brca.subtypes.cinmetrics.pi.df, 
+                                x = "cna", 
+                                y = "pi", 
+                                size = .7, 
+                                shape = 20,
+                                alpha = .7,
+                                rug = TRUE, 
+                                add = "none", 
+                                conf.int = FALSE, 
+                                color = "breast_subtype", 
+                                palette = "uchicago", 
+                                xlab = "log10(CNA)",
+                                ylab = "log10(Proliferative Index)") +
+  stat_cor(aes(color = breast_subtype), 
+           method = "spearman", size = 3, label.x.npc = "left") 
+
+# CINmetrics Plot
+cinmetrics.spearmans.corr <- ggarrange(base.segments.spearmans.corr, 
+                                   break.points.spearmans.corr, 
+                                   tai.spearmans.corr, 
+                                   fga.spearmans.corr, 
+                                   cna.spearmans.corr,
+                                   modified.tai.spearmans.corr, 
+                                   ncol = 3, nrow = 2, 
+                                   legend = "right",
+                                   common.legend = TRUE)
+return(cinmetrics.spearmans.corr)
+}
+
+brca.subtypes.corr <- get_subtypes_corr(tumor.cinmetrics.pi.df)
+brca.subtypes.corr
+```
