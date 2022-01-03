@@ -281,26 +281,21 @@ library(dplyr)
 ```{r}
 ## Loading the data with all of the CINmetrics values
 all.cinmetrics.df <- read.csv('~/Desktop/CINmetrics_Cancer_Analysis/data/processed/all_cinmetrics_df.csv')
-
 ## This function takes the dataframe with the CINmetrics values and the CNV data and creates a dataframe that will also have the clinical variables associated by Patient ID
 get_tnm <- function(all.cancer.df, all.cinmetrics.df){
   # Joining clinical variables to the CINmetrics dataframe and filtering out the cancers without TNM data
   all.tnm.df <- inner_join(all.cinmetrics.df, all.cancer.df[,c(7,13:16)], by = c("sample_id" = "Sample")) %>% unique(.) %>% filter(!project %in% c("TCGA-GBM", "TCGA-LAML", "TCGA-OV", "TCGA-THYM", "TCGA-UCS", "TCGA-DLBC", "TCGA-PCPG", "TCGA-UCEC", "TCGA-SARC", "TCGA-PRAD", "TCGA-LGG")) 
-
   # We store the output as a csv
 write.csv(all.tnm.df, file = here("data", "processed", "all_tnm_df.csv"), row.names = FALSE)
   return(all.tnm.df)
 }
-
 all.tnm.df <- get_tnm(all.cancer.df, all.cinmetrics.df)
 ```
 ## U-tests for CINmetrics and TNM Stages
 ```{r}
 ## We create vectors with the 22 cancer names and 6 CINmetrics to loop through 
 cancer.project <- c("TCGA-KIRC", "TCGA-BRCA", "TCGA-MESO", "TCGA-READ", "TCGA-KIRP", "TCGA-PAAD", "TCGA-ACC", "TCGA-CESC", "TCGA-ESCA", "TCGA-KICH", "TCGA-UVM", "TCGA-SKCM", "TCGA-COAD", "TCGA-LUSC", "TCGA-HNSC", "TCGA-TGCT", "TCGA-THCA", "TCGA-LIHC", "TCGA-BLCA", "TCGA-CHOL", "TCGA-STAD", "TCGA-LUAD")
-
 metrics <- c("tai", "modified_tai", "cna","base_segments", "break_points", "fga")
-
 ## This function takes the all.tnm.df and performs a Mann-Whitney U-test on each of the stages depending on TNM for tumor samples
 get_utest_data <- function(all.tnm.df, cancer.project, tnm.category, metrics){
   if(tnm.category == "tumor.stage"){
@@ -418,7 +413,6 @@ get_utest_data <- function(all.tnm.df, cancer.project, tnm.category, metrics){
    write.csv(metastasis.utest.df, file = here("data", "processed", "metastasis_utest_df.csv"), row.names = FALSE)
    return(metastasis.utest.df)
   }  
-
   if(tnm.category == "node"){
     # We created empty data frames to store the U-test data
     node.utest.df <- data.frame(.y. = character(),
@@ -446,14 +440,12 @@ get_utest_data <- function(all.tnm.df, cancer.project, tnm.category, metrics){
     # We separated the analyses for node data to be dependent on the number of lymph node inclusion categories there are
       
     if(cancer.project[i] == "TCGA-ACC" || cancer.project[i] == "TCGA-CESC" || cancer.project[i] == "TCGA-CHOL" || cancer.project[i] == "TCGA-KIRC" || cancer.project[i] == "TCGA-LIHC" || cancer.project[i] == "TCGA-PAAD" || cancer.project[i] == "TCGA-THCA"){
-
     node.df <- subset(all.tnm.df, project == cancer.project[i])
     
     # We filtered the data frame to only have the node data we want included in the analysis
     node.df <- node.df %>% select(!c(ajcc_pathologic_t, ajcc_pathologic_m, ajcc_clinical_m)) %>% filter(!(ajcc_pathologic_n %in% "NX") & sample_type %in% c("Metastatic", "Primary Blood Derived Cancer", "Primary Tumor", "Recurrent Tumor", "Additional - New Primary", "Primary Blood Derived Cancer - Peripheral Blood")) %>% drop_na()
   
     node.df$ajcc_pathologic_n <- ifelse(node.df$ajcc_pathologic_n %in% c("N0 (i+)", "N0 (i-)", "N0 (mol+)"), "N0", ifelse(node.df$ajcc_pathologic_n %in% c("N1mi", "N1a", "N1b", "N1c"), "N1", ifelse(node.df$ajcc_pathologic_n %in% c("N2a", "N2b", "N2c"), "N2", ifelse(node.df$ajcc_pathologic_n %in% c("N3a", "N3b", "N3c"), "N3", node.df$ajcc_pathologic_n))))
-
     for(j in metrics){
     # We performed the Mann-Whitney U-test (otherwise known as the Wilcoxon test)
     cinmetrics <- node.df[, j]
@@ -474,7 +466,6 @@ get_utest_data <- function(all.tnm.df, cancer.project, tnm.category, metrics){
     node.df <- node.df %>% select(!c(ajcc_pathologic_t, ajcc_pathologic_m, ajcc_clinical_m)) %>% filter(!(ajcc_pathologic_n %in% "NX") & sample_type %in% c("Metastatic", "Primary Blood Derived Cancer", "Primary Tumor", "Recurrent Tumor", "Additional - New Primary", "Primary Blood Derived Cancer - Peripheral Blood")) %>% drop_na()
   
     node.df$ajcc_pathologic_n <- ifelse(node.df$ajcc_pathologic_n %in% c("N0 (i+)", "N0 (i-)", "N0 (mol+)"), "N0", ifelse(node.df$ajcc_pathologic_n %in% c("N1mi", "N1a", "N1b", "N1c"), "N1", ifelse(node.df$ajcc_pathologic_n %in% c("N2a", "N2b", "N2c"), "N2", ifelse(node.df$ajcc_pathologic_n %in% c("N3a", "N3b", "N3c"), "N3", node.df$ajcc_pathologic_n))))
-
     for(j in metrics){
     # We performed the Mann-Whitney U-test (otherwise known as the Wilcoxon test)
     cinmetrics <- node.df[, j]
@@ -510,11 +501,9 @@ get_utest_data <- function(all.tnm.df, cancer.project, tnm.category, metrics){
     stop("Incorrect input for tnm.category. Make sure you pick 'tumor.stage', 'metastasis', or 'node'")
   }
   }
-
 tumor.stage.utest.df <- get_utest_data(all.tnm.df, cancer.project, tnm.category = "tumor.stage", metrics)
 metastasis.utest.df <- get_utest_data(all.tnm.df, cancer.project, tnm.category = "metastasis", metrics)
 node.utest.df <- get_utest_data(all.tnm.df, cancer.project, tnm.category = "node", metrics)
-
 ```
 
 
@@ -523,11 +512,10 @@ node.utest.df <- get_utest_data(all.tnm.df, cancer.project, tnm.category = "node
 metastasis.utest.df <- read_csv("~/Desktop/CINmetrics_Cancer_Analysis/data/processed/metastasis_utest_df.csv")
 node.utest.df <- read_csv("~/Desktop/CINmetrics_Cancer_Analysis/data/processed/node_utest_df.csv")
 tumor.stage.utest.df <- read_csv("~/Desktop/CINmetrics_Cancer_Analysis/data/processed/tumor_stage_utest_df.csv")
-
 # This function takes the dataframe with the p.adj and p.values from the U-test results and creates bar graphs to compare across cancers. 
 get_utest_graphs <- function(tnm.category, cancer.project){
   if(tnm.category == "tumor.stage"){
-    # Filter for T1 and T4 and -Log10 transformation of p.adj values
+    # Filter for T1 and T4 and -Log10 transformation of p values
     filtered.tumor.stage.utest <- filter(tumor.stage.utest.df, group1 == "T1" & group2 == "T4")
     filtered.tumor.stage.df<- filtered.tumor.stage.utest %>% select(cin, project, group1, group2)
     # Creating a function to input into sapply
@@ -535,22 +523,21 @@ get_utest_graphs <- function(tnm.category, cancer.project){
       neglog10 <- -log10(x)
       return(neglog10)
     }
-    log.tumor.stage.utest <- filtered.tumor.stage.utest %>% select(p.adj) %>% sapply(., neglog10)
+    log.tumor.stage.utest <- filtered.tumor.stage.utest %>% select(p) %>% sapply(., neglog10)
     log.tumor.stage.utest <- cbind(filtered.tumor.stage.df, log.tumor.stage.utest)
     log.tumor.stage.utest$project <- str_remove(log.tumor.stage.utest$project, "TCGA-")
-
     
     # Base Segments Plot
     base.segments.utest <- filter(log.tumor.stage.utest, cin == "base_segments")
     base.segments.barplot <- ggbarplot(base.segments.utest,
-                                       x = "project", y = "p.adj",
+                                       x = "project", y = "p",
                                        rotate = TRUE,
                                        xlab = "Cancer",
                                        ylab = "-Log10 p-value (T4 v. T1)",
                                        width = 0.4,
                                        sort.val = "asc",
                                        fill = "black",
-                                       title = "Base Segments",
+                                       title = " ",
                                        font.main = c(11, "bold"),
                                        font.x = c(10, "bold"),
                                        font.y = c(10, "bold"),
@@ -559,14 +546,14 @@ get_utest_graphs <- function(tnm.category, cancer.project){
     # Breakpoints Plot
     break.points.utest <- filter(log.tumor.stage.utest, cin == "break_points")
     break.points.barplot <- ggbarplot(break.points.utest,
-                                       x = "project", y = "p.adj",
+                                       x = "project", y = "p",
                                        rotate = TRUE,
                                        xlab = "Cancer",
                                        ylab = "-Log10 p-value (T4 v. T1)",
                                        width = 0.4,
                                        sort.val = "asc",
                                        fill = "black",
-                                       title = "Break Points",
+                                       title = " ",
                                        font.main = c(11, "bold"),
                                        font.x = c(10, "bold"),
                                        font.y = c(10, "bold"),
@@ -575,14 +562,14 @@ get_utest_graphs <- function(tnm.category, cancer.project){
     # TAI bar plot
     tai.utest <- filter(log.tumor.stage.utest, cin == "tai")
     tai.barplot <- ggbarplot(tai.utest,
-                                       x = "project", y = "p.adj",
+                                       x = "project", y = "p",
                                        rotate = TRUE,
                                        xlab = "Cancer",
                                        ylab = "-Log10 p-value (T4 v. T1)",
                                        width = 0.4,
                                        sort.val = "asc",
                                        fill = "black",
-                                       title = "TAI",
+                                       title = " ",
                                        font.main = c(11, "bold"),
                                        font.x = c(10, "bold"),
                                        font.y = c(10, "bold"),
@@ -591,14 +578,14 @@ get_utest_graphs <- function(tnm.category, cancer.project){
     # FGA bar plot
     fga.utest <- filter(log.tumor.stage.utest, cin == "fga")
     fga.barplot <- ggbarplot(fga.utest,
-                                       x = "project", y = "p.adj",
+                                       x = "project", y = "p",
                                        rotate = TRUE,
                                        xlab = "Cancer",
                                        ylab = "-Log10 p-value (T4 v. T1)",
                                        width = 0.4,
                                        sort.val = "asc",
                                        fill = "black",
-                                       title = "FGA",
+                                       title = " ",
                                        font.main = c(11, "bold"),
                                        font.x = c(10, "bold"),
                                        font.y = c(10, "bold"),
@@ -607,14 +594,14 @@ get_utest_graphs <- function(tnm.category, cancer.project){
     # CNA bar plot
     cna.utest <- filter(log.tumor.stage.utest, cin == "cna")
     cna.barplot <- ggbarplot(cna.utest,
-                                       x = "project", y = "p.adj",
+                                       x = "project", y = "p",
                                        rotate = TRUE,
                                        xlab = "Cancer",
                                        ylab = "-Log10 p-value (T4 v. T1)",
                                        width = 0.4,
                                        sort.val = "asc",
                                        fill = "black",
-                                       title = "CNA",
+                                       title = " ",
                                        font.main = c(11, "bold"),
                                        font.x = c(10, "bold"),
                                        font.y = c(10, "bold"),
@@ -624,14 +611,14 @@ get_utest_graphs <- function(tnm.category, cancer.project){
      # Modified TAI bar plot
     modified.tai.utest <- filter(log.tumor.stage.utest, cin == "modified_tai")
     modified.tai.barplot <- ggbarplot(modified.tai.utest,
-                                       x = "project", y = "p.adj",
+                                       x = "project", y = "p",
                                        rotate = TRUE,
                                        xlab = "Cancer",
                                        ylab = "-Log10 p-value (T4 v. T1)",
                                        width = 0.4,
                                        sort.val = "asc",
                                        fill = "black",
-                                       title = "Modified TAI",
+                                       title = " ",
                                        font.main = c(11, "bold"),
                                        font.x = c(10, "bold"),
                                        font.y = c(10, "bold"),
@@ -639,19 +626,21 @@ get_utest_graphs <- function(tnm.category, cancer.project){
                                       font.ytickslab = c(4, "bold"),) + geom_hline(yintercept = 1.30103, linetype = "dashed", color = "red")
     
     # Tumor Stage Bar Plot
-    tumor.stage.barplot <- ggarrange(base.segments.barplot,
-                                     break.points.barplot,
-                                     tai.barplot,
-                                     fga.barplot,
-                                     cna.barplot,
-                                     modified.tai.barplot,
+    tumor.stage.barplot <- ggarrange(base.segments.barplot + rremove("xlab"),
+                                     break.points.barplot + rremove("xlab"),
+                                     tai.barplot + rremove("xlab"),
+                                     fga.barplot + rremove("xlab"),
+                                     cna.barplot + rremove("xlab"),
+                                     modified.tai.barplot + rremove("xlab"),
                                      ncol = 1, nrow = 6)
+    tumor.stage.barplot <- annotate_figure(tumor.stage.barplot, 
+                    bottom = text_grob("-Log10 p-value (T4 v. T1)"))
     return(tumor.stage.barplot)
                                   
   }
   
   if(tnm.category == "metastasis"){
-    # Filter for T1 and T4 and -Log10 transformation of p.adj values
+    # Filter for T1 and T4 and -Log10 transformation of p values
     filtered.metastasis.utest <- filter(metastasis.utest.df, group1 == "M0" & group2 == "M1")
     filtered.metastasis.df<- filtered.metastasis.utest %>% select(cin, project, group1, group2)
     # Creating a function to input into sapply
@@ -662,7 +651,6 @@ get_utest_graphs <- function(tnm.category, cancer.project){
     log.metastasis.utest <- filtered.metastasis.utest %>% select(p) %>% sapply(., neglog10)
     log.metastasis.utest <- cbind(filtered.metastasis.df, log.metastasis.utest)
     log.metastasis.utest$project <- str_remove(log.metastasis.utest$project, "TCGA-")
-
     
     # Base Segments Plot
     base.segments.utest <- filter(log.metastasis.utest, cin == "base_segments")
@@ -679,7 +667,7 @@ get_utest_graphs <- function(tnm.category, cancer.project){
                                        font.x = c(10, "bold"),
                                        font.y = c(10, "bold"),
                                        font.xtickslab = c(10, "bold"),
-                                      font.ytickslab = c(4, "bold"),) + geom_hline(yintercept = 1.30103, linetype = "dashed", color = "red")
+                                      font.ytickslab = c(4, "bold"),) + geom_hline(yintercept = 1.30103, linetype = "dashed", color = "red") + theme(plot.title = element_text(hjust = 0.5))
     # Breakpoints Plot
     break.points.utest <- filter(log.metastasis.utest, cin == "break_points")
     break.points.barplot <- ggbarplot(break.points.utest,
@@ -695,7 +683,7 @@ get_utest_graphs <- function(tnm.category, cancer.project){
                                        font.x = c(10, "bold"),
                                        font.y = c(10, "bold"),
                                        font.xtickslab = c(10, "bold"),
-                                      font.ytickslab = c(4, "bold"),) + geom_hline(yintercept = 1.30103, linetype = "dashed", color = "red")
+                                      font.ytickslab = c(4, "bold"),) + geom_hline(yintercept = 1.30103, linetype = "dashed", color = "red") + theme(plot.title = element_text(hjust = 0.5))
     # TAI bar plot
     tai.utest <- filter(log.metastasis.utest, cin == "tai")
     tai.barplot <- ggbarplot(tai.utest,
@@ -711,7 +699,7 @@ get_utest_graphs <- function(tnm.category, cancer.project){
                                        font.x = c(10, "bold"),
                                        font.y = c(10, "bold"),
                                        font.xtickslab = c(10, "bold"),
-                                      font.ytickslab = c(4, "bold"),) + geom_hline(yintercept = 1.30103, linetype = "dashed", color = "red")
+                                      font.ytickslab = c(4, "bold"),) + geom_hline(yintercept = 1.30103, linetype = "dashed", color = "red") + theme(plot.title = element_text(hjust = 0.5))
     # FGA bar plot
     fga.utest <- filter(log.metastasis.utest, cin == "fga")
     fga.barplot <- ggbarplot(fga.utest,
@@ -727,7 +715,7 @@ get_utest_graphs <- function(tnm.category, cancer.project){
                                        font.x = c(10, "bold"),
                                        font.y = c(10, "bold"),
                                        font.xtickslab = c(10, "bold"),
-                                      font.ytickslab = c(4, "bold"),) + geom_hline(yintercept = 1.30103, linetype = "dashed", color = "red")
+                                      font.ytickslab = c(4, "bold"),) + geom_hline(yintercept = 1.30103, linetype = "dashed", color = "red") + theme(plot.title = element_text(hjust = 0.5))
     # CNA bar plot
     cna.utest <- filter(log.metastasis.utest, cin == "cna")
     cna.barplot <- ggbarplot(cna.utest,
@@ -743,7 +731,7 @@ get_utest_graphs <- function(tnm.category, cancer.project){
                                        font.x = c(10, "bold"),
                                        font.y = c(10, "bold"),
                                        font.xtickslab = c(10, "bold"),
-                                      font.ytickslab = c(4, "bold"),) + geom_hline(yintercept = 1.30103, linetype = "dashed", color = "red")
+                                      font.ytickslab = c(4, "bold"),) + geom_hline(yintercept = 1.30103, linetype = "dashed", color = "red") + theme(plot.title = element_text(hjust = 0.5))
    
      # Modified TAI bar plot
     modified.tai.utest <- filter(log.metastasis.utest, cin == "modified_tai")
@@ -760,16 +748,18 @@ get_utest_graphs <- function(tnm.category, cancer.project){
                                        font.x = c(10, "bold"),
                                        font.y = c(10, "bold"),
                                        font.xtickslab = c(10, "bold"),
-                                      font.ytickslab = c(4, "bold"),) + geom_hline(yintercept = 1.30103, linetype = "dashed", color = "red")
+                                      font.ytickslab = c(4, "bold"),) + geom_hline(yintercept = 1.30103, linetype = "dashed", color = "red") + theme(plot.title = element_text(hjust = 0.5))
     
     # Tumor Stage Bar Plot
-    metastasis.barplot <- ggarrange(base.segments.barplot,
-                                     break.points.barplot,
-                                     tai.barplot,
-                                     fga.barplot,
-                                     cna.barplot,
-                                     modified.tai.barplot,
+    metastasis.barplot <- ggarrange(base.segments.barplot + rremove("xlab"),
+                                     break.points.barplot + rremove("xlab"),
+                                     tai.barplot + rremove("xlab"),
+                                     fga.barplot + rremove("xlab"),
+                                     cna.barplot + rremove("xlab"),
+                                     modified.tai.barplot + rremove("xlab"),
                                      ncol = 1, nrow = 6)
+   metastasis.barplot <- annotate_figure(metastasis.barplot, 
+                    bottom = text_grob("-Log10 p-value (M1 v. M0)"))
     return(metastasis.barplot)
   }
   if(tnm.category == "node"){
@@ -780,22 +770,21 @@ get_utest_graphs <- function(tnm.category, cancer.project){
       neglog10 <- -log10(x)
       return(neglog10)
     }
-    filtered.node.utest <- filtered.node.utest %>% mutate(p.combined = coalesce(p.adj, p))
-    log.node.utest <- filtered.node.utest %>% select(p.combined) %>% sapply(., neglog10)
+    log.node.utest <- filtered.node.utest %>% select(p) %>% sapply(., neglog10)
     log.node.utest <- cbind(filtered.node.df, log.node.utest)
     log.node.utest$project <- str_remove(log.node.utest$project, "TCGA-")
     
     # Base Segments Plot
     base.segments.utest <- filter(log.node.utest, cin == "base_segments")
     base.segments.barplot <- ggbarplot(base.segments.utest,
-                                       x = "project", y = "p.combined",
+                                       x = "project", y = "p",
                                        rotate = TRUE,
                                        xlab = "Cancer",
                                        ylab = "-Log10 p-value (N1 v. N0)",
                                        width = 0.4,
                                        sort.val = "asc",
                                        fill = "black",
-                                       title = "Base Segments",
+                                       title = " ",
                                        font.main = c(11, "bold"),
                                        font.x = c(10, "bold"),
                                        font.y = c(10, "bold"),
@@ -804,14 +793,14 @@ get_utest_graphs <- function(tnm.category, cancer.project){
     # Breakpoints Plot
     break.points.utest <- filter(log.node.utest, cin == "break_points")
     break.points.barplot <- ggbarplot(break.points.utest,
-                                       x = "project", y = "p.combined",
+                                       x = "project", y = "p",
                                        rotate = TRUE,
                                        xlab = "Cancer",
                                        ylab = "-Log10 p-value (N1 v. N0)",
                                        width = 0.4,
                                        sort.val = "asc",
                                        fill = "black",
-                                       title = "Break Points",
+                                       title = " ",
                                        font.main = c(11, "bold"),
                                        font.x = c(10, "bold"),
                                        font.y = c(10, "bold"),
@@ -820,14 +809,14 @@ get_utest_graphs <- function(tnm.category, cancer.project){
     # TAI bar plot
     tai.utest <- filter(log.node.utest, cin == "tai")
     tai.barplot <- ggbarplot(tai.utest,
-                                       x = "project", y = "p.combined",
+                                       x = "project", y = "p",
                                        rotate = TRUE,
                                        xlab = "Cancer",
                                        ylab = "-Log10 p-value (N1 v. N0)",
                                        width = 0.4,
                                        sort.val = "asc",
                                        fill = "black",
-                                       title = "TAI",
+                                       title = "T ",
                                        font.main = c(11, "bold"),
                                        font.x = c(10, "bold"),
                                        font.y = c(10, "bold"),
@@ -836,14 +825,14 @@ get_utest_graphs <- function(tnm.category, cancer.project){
     # FGA bar plot
     fga.utest <- filter(log.node.utest, cin == "fga")
     fga.barplot <- ggbarplot(fga.utest,
-                                       x = "project", y = "p.combined",
+                                       x = "project", y = "p",
                                        rotate = TRUE,
                                        xlab = "Cancer",
                                        ylab = "-Log10 p-value (N1 v. N0)",
                                        width = 0.4,
                                        sort.val = "asc",
                                        fill = "black",
-                                       title = "FGA",
+                                       title = " ",
                                        font.main = c(11, "bold"),
                                        font.x = c(10, "bold"),
                                        font.y = c(10, "bold"),
@@ -852,14 +841,14 @@ get_utest_graphs <- function(tnm.category, cancer.project){
     # CNA bar plot
     cna.utest <- filter(log.node.utest, cin == "cna")
     cna.barplot <- ggbarplot(cna.utest,
-                                       x = "project", y = "p.combined",
+                                       x = "project", y = "p",
                                        rotate = TRUE,
                                        xlab = "Cancer",
                                        ylab = "-Log10 p-value (N1 v. N0)",
                                        width = 0.4,
                                        sort.val = "asc",
                                        fill = "black",
-                                       title = "CNA",
+                                       title = " ",
                                        font.main = c(11, "bold"),
                                        font.x = c(10, "bold"),
                                        font.y = c(10, "bold"),
@@ -869,14 +858,14 @@ get_utest_graphs <- function(tnm.category, cancer.project){
      # Modified TAI bar plot
     modified.tai.utest <- filter(log.node.utest, cin == "modified_tai")
     modified.tai.barplot <- ggbarplot(modified.tai.utest,
-                                       x = "project", y = "p.combined",
+                                       x = "project", y = "p",
                                        rotate = TRUE,
                                        xlab = "Cancer",
                                        ylab = "-Log10 p-value (N1 v. N0)",
                                        width = 0.4,
                                        sort.val = "asc",
                                        fill = "black",
-                                       title = "Modified TAI",
+                                       title = " ",
                                        font.main = c(11, "bold"),
                                        font.x = c(10, "bold"),
                                        font.y = c(10, "bold"),
@@ -884,30 +873,26 @@ get_utest_graphs <- function(tnm.category, cancer.project){
                                       font.ytickslab = c(4, "bold"),) + geom_hline(yintercept = 1.30103, linetype = "dashed", color = "red")
     
     # Tumor Stage Bar Plot
-    node.barplot <- ggarrange(base.segments.barplot,
-                                     break.points.barplot,
-                                     tai.barplot,
-                                     fga.barplot,
-                                     cna.barplot,
-                                     modified.tai.barplot,
+    node.barplot <- ggarrange(base.segments.barplot + rremove("xlab"),
+                                     break.points.barplot + rremove("xlab"),
+                                     tai.barplot + rremove("xlab"),
+                                     fga.barplot + rremove("xlab"),
+                                     cna.barplot + rremove("xlab"),
+                                     modified.tai.barplot + rremove("xlab"),
                                      ncol = 1, nrow = 6)
+    node.barplot <- annotate_figure(node.barplot, 
+                    bottom = text_grob("-Log10 p-value (N1 v. N0)"))
     return(node.barplot)
-
 }
 }
-
-
-
 tumor.stage.barplot <- get_utest_graphs(tnm.category = "tumor.stage")
 metastasis.barplot <-  get_utest_graphs(tnm.category = "metastasis")
 node.barplot <-  get_utest_graphs(tnm.category = "node")
-
 tnm.barplot <- ggarrange(tumor.stage.barplot,
                          metastasis.barplot,
                          node.barplot,
                            ncol = 3,
                            nrow = 1)
+
 tnm.barplot
-
 ```
-
