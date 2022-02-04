@@ -7,265 +7,6 @@ output: html_document
 
 This R Markdown will have the analysis to compare the CINmetrics to clinical variables. We compare the CINmetrics to metastasis, lymph node inclusion, and tumor stage (TNM) data. The output of this document will include U-test calculations between the CINmetrics and the separate TNM stages.
 
-U-test
-
-```{r}
-library(devtools)
-library(ggpubr)
-library(dplyr)
-library(tidyverse)
-library(rstatix)
-```
-
-```{r}
-load("/Volumes/G-DRIVEUSB/k99/clinical-corr/data/200831_clinical_analyses_clinical_cin.RData")
-##### Data wrangling ######
-unique_meta <- unique(clinical_cin$ajcc_pathologic_m)
-clinical_cin$ajcc_pathologic_m <- ifelse(clinical_cin$ajcc_pathologic_m %in% "cM0 (i+)", "M0", clinical_cin$ajcc_pathologic_m)
-clinical_cin$ajcc_pathologic_m <- ifelse(clinical_cin$ajcc_pathologic_m %in% c("M1a", "M1b", "M1c"), "M1", clinical_cin$ajcc_pathologic_m)
-unique_node <- unique(clinical_cin$ajcc_pathologic_n)
-clinical_cin$ajcc_pathologic_n <- ifelse(clinical_cin$ajcc_pathologic_n %in% c("N0 (i+)", "N0 (i-)", "N0 (mol+)"), "N0", clinical_cin$ajcc_pathologic_n)
-clinical_cin$ajcc_pathologic_n <- ifelse(clinical_cin$ajcc_pathologic_n %in% c("N1mi", "N1a", "N1b", "N1c"), "N1", clinical_cin$ajcc_pathologic_n)
-clinical_cin$ajcc_pathologic_n <- ifelse(clinical_cin$ajcc_pathologic_n %in% c("N2a", "N2b", "N2c"), "N2", clinical_cin$ajcc_pathologic_n)
-clinical_cin$ajcc_pathologic_n <- ifelse(clinical_cin$ajcc_pathologic_n %in% c("N3a", "N3b", "N3c"), "N3", clinical_cin$ajcc_pathologic_n)
-unique_stage <- unique(clinical_cin$ajcc_pathologic_t)
-clinical_cin$ajcc_pathologic_t <- ifelse(clinical_cin$ajcc_pathologic_t %in% c("T1a", "T1a1", "T1b", "T1b2", "T1b1", "T1c"), "T1", clinical_cin$ajcc_pathologic_t)
-clinical_cin$ajcc_pathologic_t <- ifelse(clinical_cin$ajcc_pathologic_t %in% c("T2a", "T2b", "T2c", "T2a2", "T2a1", "T2a2"), "T2", clinical_cin$ajcc_pathologic_t)
-clinical_cin$ajcc_pathologic_t <- ifelse(clinical_cin$ajcc_pathologic_t %in% c("T3a", "T3b", "T3c"), "T3", clinical_cin$ajcc_pathologic_t)
-clinical_cin$ajcc_pathologic_t <- ifelse(clinical_cin$ajcc_pathologic_t %in% c("T4a", "T4b", "T4c", "T4d", "T4e"), "T4", clinical_cin$ajcc_pathologic_t)
-save(clinical_cin, file = "/Volumes/G-DRIVEUSB/k99/clinical-corr/data/210709_clinical_cin_clean.RData")
-```
-
-```{r}
-## Pairwise T-Test for all metastisis data for each CIN metric
-# OUTPUT: Dataframe that has the pairwise t-test results, including p-values.
-# NOTE: The first column needed to renamed to match the respective CIN metric. 
-## Creating an empty dataframe for the output to go into
-test_meta <- data.frame(y = character(),
-                        group1 = character(),
-                        group2 = character(),
-                        n1 = numeric(),
-                        n2 = numeric(),
-                        p = numeric(),
-                        p.signif = character(),
-                        p.adj = numeric(),
-                        p.adj.signif = character())
-## Performing the t-test for metastasis data for all CIN metrics
-# NOTE: The first variable of the pairwise t-test must be numeric and the second variable must be a factor. Ensure that the dataframe of interest (in this case clinical_cin has the class of a dataframe only!
-clinical_cin <- as.data.frame(clinical_cin)
-cancers <- list("KIRC", "BRCA", "STAD","MESO", "READ", "KIRP", "PAAD", "CESC", "ESCA","KICH", "UVM", "SKCM", "COAD", "LUSC", "HNSC", "TGCT", "THCA", "LIHC", "BLCA", "CHOL","LUAD") # Omitted 11 cancers because of the lack of clinical data. The list of these cancers without clinical data can be found in the methods section of the CIN manuscript. ACC will be done separately because it uses a different column for its clinical data.
-for(j in cancers){
-    print(j)
-    cancerdf <- subset(clinical_cin, Project == j) # Subsetting so the loop separates this master dataframe by cancer
-    cancerdf <- cancerdf  %>% drop_na(ajcc_pathologic_m) # These are the samples that do not have metastasis data. I do this separately for each clinical variable because some samples only have one or two of the variables.
-    cancerdf <- cancerdf[!(cancerdf$ajcc_pathologic_m == "MX"),] 
-    print("finished data cleaning")
-    
-for (i in 4:9){
-  cin <- cancerdf[, i] # These are the CIN metric values
-  meta <- factor(cancerdf[,11], levels = c("M0", "M1")) # This is the metastasis data (M0 v. M1)
-  df <- cbind(cin, meta)
-  df <- as.data.frame(df)
-  test_meta1 <-
-    df %>%
-    pairwise_t_test(
-      cin ~ meta, paired = FALSE,
-      p.adjust.method = "bonferroni"
-    ) # performing t-test
-  test_meta1$.y. <- i # putting cin metrics column number 
-  test_meta1$project <- j # putting cancer names
-  test_meta <- rbind(test_meta, test_meta1) 
-  print("test_meta done")
-}
-}
-## Pairwise T-Test for ACC metastasis data for each CIN metric
-## NOTE: I am doing this cancer separately because it uses a different column (ajcc_clinical_m) and cannot be used in the loop. 
-# OUTPUT: Dataframe that has the pairwise t-test results, including p-values.
-## Creating an empty dataframe for the output to go into
-acc_meta <- data.frame(y = character(),
-                        group1 = character(),
-                        group2 = character(),
-                        n1 = numeric(),
-                        n2 = numeric(),
-                        p = numeric(),
-                        p.signif = character(),
-                        p.adj = numeric(),
-                        p.adj.signif = character())
-cancer <- list("ACC") # ACC does not use the same column. So I will repeat this analyses solely for ACC. 
-for(j in cancer){
-    print(j)
-    cancerdf <- subset(clinical_cin, Project == j) # Subsetting so the loop separates this master dataframe by cancer
-    cancerdf <- cancerdf  %>% drop_na(ajcc_clinical_m) # These are the samples that do not have metastasis data. I do this separately for each clinical variable because some samples only have one or two of the variables.
-    cancerdf <- cancerdf[!(cancerdf$ajcc_clinical_m == "MX"),] 
-    print("finished data cleaning")
-    
-for (i in 4:9){
-  cin <- cancerdf[, i] # These are the CIN metric values
-  meta <- factor(cancerdf[,10], levels = c("M0", "M1")) # This is the metastasis data from ajcc_clinical_m (M0 v. M1)
-  df <- cbind(cin, meta)
-  df <- as.data.frame(df)
-  acc_meta1 <-
-    df %>%
-    pairwise_t_test(
-      cin ~ meta, paired = FALSE,
-      p.adjust.method = "bonferroni"
-    ) 
-  acc_meta1$.y. <- i
-  acc_meta1$project <- j
-  acc_meta <- rbind(acc_meta, acc_meta1) 
-  print("test_meta done")
-}
-}
-## Data cleaning
-test_meta <- rbind(test_meta, acc_meta) %>% as.data.frame() # Combining the master dataframe with the p-values and the acc dataframe for metastisis data
-colnames(test_meta)[1] <- "cin"
-test_meta <- test_meta[, c(1, 10, 2:9)]
-# Changing cin column values for cin to match name instead of column number
-test_meta$cin <- ifelse(test_meta$cin %in% "4", "numBases.3", test_meta$cin)
-test_meta$cin <- ifelse(test_meta$cin %in% "5", "numBreakPoints.3", test_meta$cin)
-test_meta$cin <- ifelse(test_meta$cin %in% "6", "tai.3", test_meta$cin)
-test_meta$cin <- ifelse(test_meta$cin %in% "7", "mod.tai.3", test_meta$cin)
-test_meta$cin <- ifelse(test_meta$cin %in% "8", "fga.3", test_meta$cin)
-test_meta$cin <- ifelse(test_meta$cin %in% "9", "cna.3", test_meta$cin)
-# Changing group 1 and 2 to show the metastisis category instead of factor number
-test_meta$group1 <- ifelse(test_meta$group1 %in% "1", "M0", test_meta$group1)
-test_meta$group2 <- ifelse(test_meta$group2 %in% "2", "M1", test_meta$group2)
-##### Save #####
-save(test_meta, file = "/Volumes/G-DRIVEUSB/k99/clinical-corr/data/210713_clinical_analyses_testmeta_all.RData")
-```
-
-
-
-```{r}
-## Pairwise T-Test for all node data for each CIN metric
-# OUTPUT: Dataframe that has the pairwise t-test results, including p-values.
-## Creating an empty dataframe for the output to go into
-test_node <- data.frame(y = character(),
-                        group1 = character(),
-                        group2 = character(),
-                        n1 = numeric(),
-                        n2 = numeric(),
-                        p = numeric(),
-                        p.signif = character(),
-                        p.adj = numeric(),
-                        p.adj.signif = character())
-## Performing the t-test for metastisis data for all CIN metrics
-# NOTE: The first variable of the pairwise t-test must be numeric and the second variable must be a factor. Ensure that the dataframe of interest (in this case clinical_cin has the class of a dataframe only!
-clinical_cin <- as.data.frame(clinical_cin)
-cancers <- list("KIRC", "BRCA", "STAD","MESO", "READ", "KIRP", "PAAD", "CESC", "ESCA","KICH", "SKCM", "COAD", "LUSC", "HNSC", "TGCT", "THCA", "LIHC", "BLCA", "CHOL","LUAD", "ACC") # Omitted 12 cancers because of the lack of clinical data. The list of the 11 cancers without clinical data can be found in the methods section of the CIN manuscript. UVM was omitted because it only had N0 data
-for(j in cancers){
-    print(j)
-    cancerdf <- subset(clinical_cin, Project == j) # Subsetting so the loop separates this master dataframe by cancer
-    cancerdf <- cancerdf %>% drop_na(ajcc_pathologic_n) # These are the samples that do not have metastasis data. I do this separately for each clinical variable because some samples only have one or two of the variables.
-    cancerdf <- cancerdf[!(cancerdf$ajcc_pathologic_n == "NX"), ] 
-    print("finished data cleaning")
-    
-for (i in 4:9){
-  cin <- cancerdf[, i] # These are the CIN metric values
-  node <- factor(cancerdf[,12], levels = c("N0", "N1", "N2", "N3")) # This is the node data
-  df <- cbind(cin, node)
-  df <- as.data.frame(df)
-  test_node1 <-
-    df %>%
-    pairwise_t_test(
-      cin ~ node, paired = FALSE,
-      p.adjust.method = "bonferroni"
-    ) 
-  test_node1$.y. <- i
-  test_node1$project <- j
-  test_node <- rbind(test_node, test_node1) 
-  print("test_node done")
-}
-}
-## Data cleaning
-test_node <- as.data.frame(test_node)
-colnames(test_node)[1] <- "cin"
-test_node <- test_node[, c(1, 10, 2:9)]
-# Changing cin column values for cin to match name instead of column number
-test_node$cin <- ifelse(test_node$cin %in% "4", "numBases.3", test_node$cin)
-test_node$cin <- ifelse(test_node$cin %in% "5", "numBreakPoints.3", test_node$cin)
-test_node$cin <- ifelse(test_node$cin %in% "6", "tai.3", test_node$cin)
-test_node$cin <- ifelse(test_node$cin %in% "7", "mod.tai.3", test_node$cin)
-test_node$cin <- ifelse(test_node$cin %in% "8", "fga.3", test_node$cin)
-test_node$cin <- ifelse(test_node$cin %in% "9", "cna.3", test_node$cin)
-# Changing group 1 and 2 to show the node category instead of factor number
-test_node$group1 <- ifelse(test_node$group1 %in% "1", "N0", test_node$group1)
-test_node$group1 <- ifelse(test_node$group1 %in% "2", "N1", test_node$group1)
-test_node$group1 <- ifelse(test_node$group1 %in% "3", "N2", test_node$group1)
-test_node$group2 <- ifelse(test_node$group2 %in% "2", "N1", test_node$group2)
-test_node$group2 <- ifelse(test_node$group2 %in% "3", "N2", test_node$group2)
-test_node$group2 <- ifelse(test_node$group2 %in% "4", "N3", test_node$group2)
-##### Save #####
-save(test_node, file = "/Volumes/G-DRIVEUSB/k99/clinical-corr/data/210713_clinical_analyses_testnode_all.RData")
-```
-
-```{r}
-## Pairwise T-Test for all stage data for each CIN metric
-# OUTPUT: Dataframe that has the pairwise t-test results, including p-values.
-# NOTE: The first column needed to renamed to match the respective CIN metric. 
-## Creating an empty dataframe for the output to go into
-test_stage <- data.frame(y = character(),
-                        group1 = character(),
-                        group2 = character(),
-                        n1 = numeric(),
-                        n2 = numeric(),
-                        p = numeric(),
-                        p.signif = character(),
-                        p.adj = numeric(),
-                        p.adj.signif = character())
-## Performing the t-test for tumor stage data for all CIN metrics
-# NOTE: The first variable of the pairwise t-test must be numeric and the second variable must be a factor. Ensure that the dataframe of interest (in this case clinical_cin has the class of a dataframe only!
-clinical_cin <- as.data.frame(clinical_cin)
-cancers <- list("KIRC", "BRCA", "STAD","MESO", "READ", "KIRP", "PAAD", "CESC", "ESCA","KICH", "SKCM", "COAD", "LUSC", "HNSC", "TGCT", "THCA", "LIHC", "BLCA", "CHOL","LUAD", "ACC", "UVM") # Omitted 11 cancers because of the lack of clinical data. The list of these cancers can be found in the methods section of the CIN manuscript. 
-for(j in cancers){
-    print(j)
-    cancerdf <- subset(clinical_cin, Project == j) # Subsetting so the loop separates this master dataframe by cancer
-    cancerdf <- cancerdf %>% drop_na(ajcc_pathologic_t) # These are the samples that do not have metastasis data. I do this separately for each clinical variable because some samples only have one or two of the variables.
-    cancerdf <- cancerdf[!(cancerdf$ajcc_pathologic_n == c("TX", "Tis")), ] # Removing Tis because it was not included in the PI paper analyses
-    print("finished data cleaning")
-    
-for (i in 4:9){
-  cin <- cancerdf[, i] # These are the CIN metric values
-  stage <- factor(cancerdf[,13], levels = c("T0", "T1", "T2", "T3", "T4")) # This is the stage data
-  df <- cbind(cin, stage)
-  df <- as.data.frame(df)
-  test_stage1 <-
-    df %>%
-    pairwise_t_test(
-      cin ~ stage, paired = FALSE,
-      p.adjust.method = "bonferroni"
-    ) 
-  test_stage1$.y. <- i
-  test_stage1$project <- j
-  test_stage <- rbind(test_stage, test_stage1) 
-  print("test_stage done")
-}
-}
-## Data cleaning
-test_stage <- as.data.frame(test_stage)
-colnames(test_stage)[1] <- "cin"
-test_stage <- test_stage[, c(1, 10, 2:9)]
-# Changing cin column values for cin to match name instead of column number 
-test_stage$cin <- ifelse(test_stage$cin %in% "4", "numBases.3", test_stage$cin)
-test_stage$cin <- ifelse(test_stage$cin %in% "5", "numBreakPoints.3", test_stage$cin)
-test_stage$cin <- ifelse(test_stage$cin %in% "6", "tai.3", test_stage$cin)
-test_stage$cin <- ifelse(test_stage$cin %in% "7", "mod.tai.3", test_stage$cin)
-test_stage$cin <- ifelse(test_stage$cin %in% "8", "fga.3", test_stage$cin)
-test_stage$cin <- ifelse(test_stage$cin %in% "9", "cna.3", test_stage$cin)
-# Changing group 1 and 2 to show the node category instead of factor number
-test_stage$group1 <- ifelse(test_stage$group1 %in% "1", "T0", test_stage$group1)
-test_stage$group1 <- ifelse(test_stage$group1 %in% "2", "T1", test_stage$group1)
-test_stage$group1 <- ifelse(test_stage$group1 %in% "3", "T2", test_stage$group1)
-test_stage$group1 <- ifelse(test_stage$group1 %in% "4", "T3", test_stage$group1)
-test_stage$group2 <- ifelse(test_stage$group2 %in% "2", "T1", test_stage$group2)
-test_stage$group2 <- ifelse(test_stage$group2 %in% "3", "T2", test_stage$group2)
-test_stage$group2 <- ifelse(test_stage$group2 %in% "4", "T3", test_stage$group2)
-test_stage$group2 <- ifelse(test_stage$group2 %in% "5", "T4", test_stage$group2)
-##### Save #####
-save(test_stage, file = "/Volumes/G-DRIVEUSB/k99/clinical-corr/data/210713_clinical_analyses_teststage_all.RData")
-```
-
-
 -------------------------------------------------------------------
 
 # CINmetrics with Clinical Variables
@@ -627,11 +368,10 @@ get_utest_graphs <- function(tnm.category, cancer.project){
     
     # Tumor Stage Bar Plot
     tumor.stage.barplot <- ggarrange(base.segments.barplot + rremove("xlab"),
-                                     break.points.barplot + rremove("xlab"),
-                                     tai.barplot + rremove("xlab"),
                                      fga.barplot + rremove("xlab"),
+                                     break.points.barplot + rremove("xlab"),
                                      cna.barplot + rremove("xlab"),
-                                     modified.tai.barplot + rremove("xlab"),
+                                     tai.barplot + rremove("xlab"), modified.tai.barplot + rremove("xlab"),
                                      ncol = 1, nrow = 6)
     tumor.stage.barplot <- annotate_figure(tumor.stage.barplot, 
                     bottom = text_grob("-Log10 p-value (T4 v. T1)"))
@@ -694,7 +434,7 @@ get_utest_graphs <- function(tnm.category, cancer.project){
                                        width = 0.4,
                                        sort.val = "asc",
                                        fill = "black",
-                                       title = "TAI",
+                                       title = "Total Aberration Index",
                                        font.main = c(11, "bold"),
                                        font.x = c(10, "bold"),
                                        font.y = c(10, "bold"),
@@ -726,7 +466,7 @@ get_utest_graphs <- function(tnm.category, cancer.project){
                                        width = 0.4,
                                        sort.val = "asc",
                                        fill = "black",
-                                       title = "CNA",
+                                       title = "Copy Number Aberrations",
                                        font.main = c(11, "bold"),
                                        font.x = c(10, "bold"),
                                        font.y = c(10, "bold"),
@@ -743,7 +483,7 @@ get_utest_graphs <- function(tnm.category, cancer.project){
                                        width = 0.4,
                                        sort.val = "asc",
                                        fill = "black",
-                                       title = "Modified TAI",
+                                       title = "Modified Total Aberration Index",
                                        font.main = c(11, "bold"),
                                        font.x = c(10, "bold"),
                                        font.y = c(10, "bold"),
@@ -752,11 +492,11 @@ get_utest_graphs <- function(tnm.category, cancer.project){
     
     # Tumor Stage Bar Plot
     metastasis.barplot <- ggarrange(base.segments.barplot + rremove("xlab"),
-                                     break.points.barplot + rremove("xlab"),
-                                     tai.barplot + rremove("xlab"),
-                                     fga.barplot + rremove("xlab"),
-                                     cna.barplot + rremove("xlab"),
-                                     modified.tai.barplot + rremove("xlab"),
+                                    fga.barplot + rremove("xlab"),
+                                    break.points.barplot + rremove("xlab"),
+                                    cna.barplot + rremove("xlab"),
+                                    tai.barplot + rremove("xlab"),
+                                    modified.tai.barplot + rremove("xlab"),
                                      ncol = 1, nrow = 6)
    metastasis.barplot <- annotate_figure(metastasis.barplot, 
                     bottom = text_grob("-Log10 p-value (M1 v. M0)"))
@@ -816,7 +556,7 @@ get_utest_graphs <- function(tnm.category, cancer.project){
                                        width = 0.4,
                                        sort.val = "asc",
                                        fill = "black",
-                                       title = "T ",
+                                       title = " ",
                                        font.main = c(11, "bold"),
                                        font.x = c(10, "bold"),
                                        font.y = c(10, "bold"),
@@ -874,11 +614,11 @@ get_utest_graphs <- function(tnm.category, cancer.project){
     
     # Tumor Stage Bar Plot
     node.barplot <- ggarrange(base.segments.barplot + rremove("xlab"),
-                                     break.points.barplot + rremove("xlab"),
-                                     tai.barplot + rremove("xlab"),
-                                     fga.barplot + rremove("xlab"),
-                                     cna.barplot + rremove("xlab"),
-                                     modified.tai.barplot + rremove("xlab"),
+                              fga.barplot + rremove("xlab"),
+                              break.points.barplot + rremove("xlab"),
+                              cna.barplot + rremove("xlab"),
+                              tai.barplot + rremove("xlab"),
+                              modified.tai.barplot + rremove("xlab"),
                                      ncol = 1, nrow = 6)
     node.barplot <- annotate_figure(node.barplot, 
                     bottom = text_grob("-Log10 p-value (N1 v. N0)"))
