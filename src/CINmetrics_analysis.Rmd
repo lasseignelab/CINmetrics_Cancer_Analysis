@@ -236,17 +236,19 @@ spearman.normal.cinmetrics <- normal.cinmetrics.df %>% select(tai, modified_tai,
 # Heatmap of Spearman's correlation
 heatmap.colors <- colorRamp2(c(-1, 0, 1), c("#709AE1FF","#FFFFFF",  "#FED439FF"))
 normal.cinmetrics.heatmap <- Heatmap(spearman.normal.cinmetrics,
+                                    width = ncol(spearman.normal.cinmetrics)*unit(15, "mm"),
+                                    height = nrow(spearman.normal.cinmetrics)*unit(15, "mm"),
                                     col = heatmap.colors,
                                     show_row_dend = FALSE,
                                     show_column_dend = FALSE,
                                     column_title = "Normal",
                                     column_title_gp = gpar(fontsize = 10, fontface = "bold"),
                                     row_labels = c("TAI", "Modified TAI", "CNA", "Base Segments", "Break Points", "FGA"),
-                                    row_names_gp = gpar(fontsize = 10, fontface = "bold"),
+                                    row_names_gp = gpar(fontsize = 7, fontface = "bold"),
                                     column_labels = c("TAI", "Modified TAI", "CNA", "Base Segments", "Break Points", "FGA"),
-                                    column_names_gp = gpar(fontsize = 10, fontface = "bold"),
+                                    column_names_gp = gpar(fontsize = 7, fontface = "bold"),
                                     column_names_rot = 45,
-                                    heatmap_legend_param = list(title = "Spearman's Rho", title_gp = gpar(fontsize = 10, fontface = "bold")))
+                                    heatmap_legend_param = list(title = "Spearman's Rho", title_gp = gpar(fontsize = 7, fontface = "bold")))
 return(normal.cinmetrics.heatmap)
 }
 
@@ -258,17 +260,19 @@ spearman.tumor.cinmetrics <- tumor.cinmetrics.df %>% select(tai, modified_tai, c
 # Heatmap of Spearman's correlation
 heatmap.colors <- colorRamp2(c(-1, 0, 1), c("#709AE1FF","#FFFFFF",  "#FED439FF"))
 tumor.cinmetrics.heatmap <- Heatmap(spearman.tumor.cinmetrics,
+                                    width = ncol(spearman.tumor.cinmetrics)*unit(15, "mm"),
+                                    height = nrow(spearman.tumor.cinmetrics)*unit(15, "mm"),
                                     col = heatmap.colors,
                                     show_row_dend = FALSE,
                                     show_column_dend = FALSE,
                                     column_title = "Tumor",
                                     column_title_gp = gpar(fontsize = 10, fontface = "bold"),
                                     row_labels = c("TAI", "Modified TAI", "CNA", "Base Segments", "Break Points", "FGA"),
-                                    row_names_gp = gpar(fontsize = 10, fontface = "bold"),
+                                    row_names_gp = gpar(fontsize = 7, fontface = "bold"),
                                     column_labels = c("TAI", "Modified TAI", "CNA", "Base Segments", "Break Points", "FGA"),
-                                    column_names_gp = gpar(fontsize = 10, fontface = "bold"),
+                                    column_names_gp = gpar(fontsize = 7, fontface = "bold"),
                                     column_names_rot = 45,
-                                    heatmap_legend_param = list(title = "Spearman's Rho", title_gp = gpar(fontsize = 10, fontface = "bold")))
+                                    heatmap_legend_param = list(title = "Spearman's Rho", title_gp = gpar(fontsize = 7, fontface = "bold")))
 return(tumor.cinmetrics.heatmap)
 }
 }
