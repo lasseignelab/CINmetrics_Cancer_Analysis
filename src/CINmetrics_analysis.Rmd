@@ -312,16 +312,18 @@ get_cinmetrics_cancer_heatmap <- function(all.cinmetrics.df, sample.type){
     # Creating Heatmap
     heatmap.colors <- colorRamp2(c(-1, 0, 1), c("#709AE1FF","#FFFFFF",  "#FED439FF"))
     tumor.cancer.heatmap <- Heatmap(transposed.spearman.df,
+                                    width = ncol(transposed.spearman.df)*unit(4, "mm"),
+                                    height = nrow(transposed.spearman.df)*unit(11, "mm"),
                                     rect_gp = gpar(col = "white", lwd = .5),
                                     col = heatmap.colors,
                                     show_column_dend = TRUE,
                                     show_row_dend = FALSE,
                                     column_title = "Tumor",
                                     column_title_gp = gpar(fontsize = 10, fontface = "bold"),
-                                    row_names_gp = gpar(fontsize = 10, fontface = "bold"),
+                                    row_names_gp = gpar(fontsize = 7, fontface = "bold"),
                                     column_names_gp = gpar(fontsize = 7, fontface = "bold"),
                                     column_names_rot = 45,
-                                    heatmap_legend_param = list(title = "Spearman's Rho", title_gp = gpar(fontsize = 10, fontface = "bold")))
+                                    heatmap_legend_param = list(title = "Spearman's Rho", title_gp = gpar(fontsize = 7, fontface = "bold")))
     return(tumor.cancer.heatmap)
   }
     if(sample.type == "normal"){
@@ -345,17 +347,19 @@ get_cinmetrics_cancer_heatmap <- function(all.cinmetrics.df, sample.type){
     
     # Creating Heatmap
     heatmap.colors <- colorRamp2(c(-1, 0, 1), c("#709AE1FF","#FFFFFF",  "#FED439FF"))
-    normal.cancer.heatmap <- Heatmap(transposed.spearman.df,
+     normal.cancer.heatmap <- Heatmap(transposed.spearman.df,
+                                    width = ncol(transposed.spearman.df)*unit(4, "mm"),
+                                    height = nrow(transposed.spearman.df)*unit(11, "mm"),
                                     rect_gp = gpar(col = "white", lwd = .5),
                                     col = heatmap.colors,
                                     show_column_dend = TRUE,
                                     show_row_dend = FALSE,
                                     column_title = "Normal",
                                     column_title_gp = gpar(fontsize = 10, fontface = "bold"),
-                                    row_names_gp = gpar(fontsize = 10, fontface = "bold"),
+                                    row_names_gp = gpar(fontsize = 7, fontface = "bold"),
                                     column_names_gp = gpar(fontsize = 7, fontface = "bold"),
                                     column_names_rot = 45,
-                                    heatmap_legend_param = list(title = "Spearman's Rho", title_gp = gpar(fontsize = 10, fontface = "bold")))
+                                    heatmap_legend_param = list(title = "Spearman's Rho", title_gp = gpar(fontsize = 7, fontface = "bold")))
     return(normal.cancer.heatmap)
   } 
   else{
