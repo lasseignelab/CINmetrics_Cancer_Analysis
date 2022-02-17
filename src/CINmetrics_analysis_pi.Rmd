@@ -60,8 +60,8 @@ save(all.gex.list, file = here("data", "processed", "all.gex.list.RData"))
 # We create a vector with the 19 cancers used in the Proliferative Index paper that the function will loop through
 
 load(all.gex.list)
-all.cinmetrics.df <- read.csv("/data/project/lasseigne_lab/SashaThalluri/CINmetrics_Cancer_Analysis/data/processed/all_cinmetrics_df.csv")
-
+all.cinmetrics.df <- read.csv(here("data", "processed", "all_cinmetrics_df.csv"))
+  
 cancer.project <- c("TCGA-CESC", "TCGA-LUSC", "TCGA-BLCA", "TCGA-OV", "TCGA-ESCA", "TCGA-LAML", "TCGA-HNSC", "TCGA-STAD", "TCGA-SARC", "TCGA-GBM", "TCGA-BRCA", "TCGA-LUAD", "TCGA-MESO", "TCGA-ACC", "TCGA-PAAD", "TCGA-LIHC", "TCGA-KIRC", "TCGA-LGG", "TCGA-KIRP")
   
 # We will create a function that creates a dataframe with the tumor CINmetrics values and the matched tumor ProliferativeIndex values
@@ -133,7 +133,7 @@ brca.laml.log.cinmetrics.pi.df <- log.tumor.cinmetrics.pi.df %>% dplyr::filter(.
 breast.subtypes <- subset(breast.subtypes, select = c("Complete TCGA ID", "PAM50 mRNA"))
 
 brca.laml.subtypes.cinmetrics.pi.df  <- full_join(brca.laml.log.cinmetrics.pi.df, breast.subtypes, by = c("patient_id" = "Complete TCGA ID")) %>%
-  rename("breast_subtype" = "PAM50 mRNA") %>% drop_na(project) 
+  dplyr::rename("breast_subtype" = "PAM50 mRNA") %>% drop_na(project) 
 
 brca.laml.subtypes.cinmetrics.pi.df$breast_subtype <- replace(brca.laml.subtypes.cinmetrics.pi.df$breast_subtype, is.na(brca.laml.subtypes.cinmetrics.pi.df$breast_subtype), "Not Reported")
 
