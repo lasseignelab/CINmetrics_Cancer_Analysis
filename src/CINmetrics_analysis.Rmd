@@ -23,7 +23,7 @@ library(reshape2)
 ## Creating CINmetrics Dataframe
 ```{r}
 ## Loading the data with all of the CNV data
-all.cancer.df <- read.csv('~/Desktop/CINmetrics_Cancer_Analysis/data/processed/all_cancer_df.csv')
+all.cancer.df <- read.csv(here("data", "processed", "all_cancer_df.csv"))
 
 ## The function takes the dataframe with all of the CNV data and calculates the CINmetrics. It is merged with the TCGA project name.
 

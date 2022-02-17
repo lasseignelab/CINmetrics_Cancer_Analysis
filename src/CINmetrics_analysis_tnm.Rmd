@@ -21,7 +21,8 @@ library(dplyr)
 ## CINmetrics with Clinical Variables Dataframe
 ```{r}
 ## Loading the data with all of the CINmetrics values
-all.cinmetrics.df <- read.csv('~/Desktop/CINmetrics_Cancer_Analysis/data/processed/all_cinmetrics_df.csv')
+all.cinmetrics.df <- read.csv(here("data", "processed", "all_cinmetrics_df.csv"))
+
 ## This function takes the dataframe with the CINmetrics values and the CNV data and creates a dataframe that will also have the clinical variables associated by Patient ID
 get_tnm <- function(all.cancer.df, all.cinmetrics.df){
   # Joining clinical variables to the CINmetrics dataframe and filtering out the cancers without TNM data
@@ -250,9 +251,10 @@ node.utest.df <- get_utest_data(all.tnm.df, cancer.project, tnm.category = "node
 
 ```{r}
 # Loading data for Wilcox bar graphs
-metastasis.utest.df <- read_csv("~/Desktop/CINmetrics_Cancer_Analysis/data/processed/metastasis_utest_df.csv")
-node.utest.df <- read_csv("~/Desktop/CINmetrics_Cancer_Analysis/data/processed/node_utest_df.csv")
-tumor.stage.utest.df <- read_csv("~/Desktop/CINmetrics_Cancer_Analysis/data/processed/tumor_stage_utest_df.csv")
+metastasis.utest.df <- read.csv(here("data", "processed", "metastasis_utest_df.csv"))
+node.utest.df <- read.csv(here("data", "processed", "node_utest_df.csv"))
+tumor.stage.utest.df <- read.csv(here("data", "processed", "tumor_stage_utest_df.csv"))
+
 # This function takes the dataframe with the p.adj and p.values from the U-test results and creates bar graphs to compare across cancers. 
 get_utest_graphs <- function(tnm.category, cancer.project){
   if(tnm.category == "tumor.stage"){
