@@ -255,7 +255,7 @@ metastasis.utest.df <- read.csv(here("data", "processed", "metastasis_utest_df.c
 node.utest.df <- read.csv(here("data", "processed", "node_utest_df.csv"))
 tumor.stage.utest.df <- read.csv(here("data", "processed", "tumor_stage_utest_df.csv"))
 
-# This function takes the dataframe with the p.adj and p.values from the U-test results and creates bar graphs to compare across cancers. 
+# This function takes the dataframe with the p.adj and p.values from the U-test results and creates bar graphs to compare across cancers. Note that there will be a red line on the graph which is showing the Bonferroni correction of p = 0.05.
 get_utest_graphs <- function(tnm.category, cancer.project){
   if(tnm.category == "tumor.stage"){
     # Filter for T1 and T4 and -Log10 transformation of p values
