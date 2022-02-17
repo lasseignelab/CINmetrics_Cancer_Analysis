@@ -588,4 +588,114 @@ save(fgsea.input, fgsea.hallmark, fgsea.kegg, fgsea.reactome, fgsea.go,
      file = "diff-expression/data/190220_deseq2_kirc-cin_fgsea.RData")
 ```
 
+-------------------------------------------------------------
+# CINmetrics and Gene Expression Analysis
+
+```{r}
+library(tidyverse)
+```
+
+# UpsetPlots
+```{r}
+
+load(all.gex.list)
+
+# The function creates an Upset Plot of the overlapping differentially expressed genes using the CINmetrics as a condition
+
+get_gex_upsetplots <- function(cancer.project){
+  if(length(cancer.project) == 1) {
+    # Matching Sample IDs with both datasets
+    cancer.cinmetrics.df <- all.cinmetrics.df %>% filter(project == cancer.project) %>% select(sample_id, sample_type, base_segments, break_points, tai, fga, cna, modified_tai)
+    cancer.gex <- all.gex.list[["TCGA-KIRC"]]
+    cancer.cinmetrics.df <- cancer.cinmetrics.df[sample_id %in% cancer.gex@colData$sample]
+    cancer.gex <-  cancer.gex[, cancer.gex@colData$sample %in% cancer.cinmetrics.df$sample_id]
+    
+    # Order both by sample so metrics line up properly 
+    cancer.gex <- cancer.gex[, order(cancer.gex@colData$sample)]
+    setorder(cancer.cinmetrics.df,
+         sample_id)
+    
+    # Combining CINmetrics Dataframe to Gene Expression Data and subsetting by tumor samples
+    cancer.gex@colData <- cbind(cancer.gex@colData, cancer.cinmetrics.df[, c(base_segments, break_points, tai, fga, cna, modified_tai)])
+    tumor.cancer.gex <- cancer.gex[, cancer.gex@colData$shortLetterCode == "TP"]
+    tumor.cancer.gex <- tumor.cancer.gex[, !is.na(tumor.cancer.gex@colData$age_at_diagnosis)]
+    
+    ###### INSERT SAVING LINE HERE ######
+    
+    # Creating DESeqDataSet
+    cancer.deseq.dataset.list <- list(base_segments = DESeqDataSet(se = na.omit(tumor.cancer.gex),
+                                                                      design = ~ gender + tumor_stage + age_at_diagnosis + base_segments),
+                                         break_points = DESeqDataSet(se = na.omit(tumor.cancer.gex),
+                                                        design = ~ gender + tumor_stage + age_at_diagnosis + break_points),
+                          tai = DESeqDataSet(se = na.omit(tumor.cancer.gex),
+                                             design = ~ gender + tumor_stage + age_at_diagnosis + tai),
+                          fga = DESeqDataSet(se = na.omit(tumor.cancer.gex),
+                                                 design = ~ gender + tumor_stage + age_at_diagnosis + fga),
+                          cna = DESeqDataSet(se = na.omit(tumor.cancer.gex),
+                                             design = ~ gender + tumor_stage + age_at_diagnosis + cna),
+                          modified_tai = DESeqDataSet(se = na.omit(tumor.cancer.gex),
+                                             design = ~ gender + tumor_stage + age_at_diagnosis + modified_tai))
+    
+    # Running DESeq2
+    cancer.deseq.analysis.list <- list(#base_segments = DESeq(object = dds.cancer.deseq.dataset.list$base_segments),
+  break_points = DESeq(object = cancer.deseq.dataset.list$break_points),
+  tai = DESeq(object = cancer.deseq.dataset.list$tai),
+  fga = DESeq(object = cancer.deseq.dataset.list$fga),
+  cna = DESeq(object = cancer.deseq.dataset.list$cna),
+  modified_tai  = DESeq(object = cancer.deseq.dataset.list$modified_tai))
+    
+    # Variance-stabilizing transform
+    cancer.vst.list <- list(#base_segments = vst(object = cancer.deseq.analysis.list$base_segments),
+  break_points = vst(object = cancer.deseq.analysis.list$break_points),
+  tai = vst(object = cancer.deseq.analysis.list$tai),
+  fga = vst(object = cancer.deseq.analysis.list$fga),
+  cna = vst(object = cancer.deseq.analysis.list$cna),
+  modified_tai = vst(object = cancer.deseq.analysis.list$modified_tai))
+    
+    # Compiling results
+    cancer.results.list <- list(#base_segments = results(object = cancer.deseq.analysis.list$base_segments),
+  break_points = results(object = cancer.deseq.analysis.list$break_points),
+  tai = results(object = cancer.deseq.analysis.list$tai),
+  fga = results(object = cancer.deseq.analysis.list$fga),
+  cna = results(object = cancer.deseq.analysis.list$cna),
+  modified_tai = results(object = cancer.deseq.analysis.list$modified_tai))
+    
+    ###### SAVE RESULTS HERE #####
+    
+    # Obtaining Gene IDS
+    gene.ids.list <- list(break_points = rownames(cancer.results.list$break_points[!is.na(cancer.results.list$break_points$padj) & cancer.results.list$break_points$padj < 0.05,]),
+                   tai = rownames(cancer.results.list$tai[!is.na(cancer.results.list$tai$padj) & cancer.results.list$tai$padj < 0.05,]),
+                   fga = rownames(cancer.results.list$fga[!is.na(cancer.results.listt$fga$padj) & res.kirc.cin.list$mod.tai$padj < 0.05,]),
+                   cna = rownames(cancer.results.list$cna[!is.na(cancer.results.list$cna$padj) & res.kirc.cin.list$cna$padj < 0.05,]),
+                   modified_tai = rownames(cancer.results.list$modified_tai[!is.na(cancer.results.list$modified_tai$padj) & cancer.results.list$modifed_tai$padj < 0.05,]))
+    
+    # Creating Upset Plots for Overlapping Genes
+    distinct.matrix <- make_comb_mat(gene.ids.list)
+    
+    ## Plots
+    set <- set_size(distinct.matrix)
+    combo <- comb_size(distinct.matrix)
+    # Creating UpSet Plot with Distinct Mode
+    distinct.upsetplot <- UpSet(distinct.matrix, set_order = c("break_points", "tai", "fga", "cna", "modified_tai"),
+                                comb_order = order(comb_size(distinct.matrix)),
+                                top_annotation = HeatmapAnnotation("Overlapping Genes" = anno_barplot(combo, ylim = c(0, max(combo)*1.1), border = FALSE, gp = gpar(fill = "black"), height = unit(4, "cm")), annotation_name_side = "left", annotation_name_rot = 90),row_title = "distinct mode") 
+    
+    # Adding Number of Overlapping Genes to Plot      
+    draw.distinct.upsetplot <- draw(distinct.upsetplot)
+    order <- column_order(draw.distinct.upsetplot)
+    decorate_annotation("Overlapping Genes", {
+    grid.text(combo[order()], x = seq_along(combo), y = unit(combo[order], "native") + unit(2, "pt"), 
+        default.units = "native", just = c("left", "bottom"), 
+        gp = gpar(fontsize = 6, col = "#404040"), rot = 45)
+})
+    
+    return(draw.distinct.upsetplot)
+    
+  } else{
+    stop("Incorrect number of cancer projects. Make sure to only have one cancer in this function")
+  }
+} 
+
+
+```
 
