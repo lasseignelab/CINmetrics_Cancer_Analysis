@@ -11,7 +11,7 @@ This R Markdown will have the analysis to compare the CINmetrics to one another 
 ## CINmetrics Analysis with CINmetrics Package
 
 ```{r}
-# These are the libraries that are used throughout this R Markdown
+# These are the packages that are used throughout this R Markdown
 library(CINmetrics)
 library(tidyverse)
 library(ggpubr)
