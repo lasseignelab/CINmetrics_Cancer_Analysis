@@ -5,599 +5,31 @@ date: "8/23/2021"
 output: html_document
 ---
 
-This R Markdown will have the analysis to compare the CINmetrics to gene expression data. The output of this document will include heatmaps of the Spearman's correlation between the top 30 principal components of the gene expression data, UpSet Plots to visualize the common differentially expressed genes within the different CINmetrics.
+This R Markdown will have the analysis to compare the CINmetrics to gene expression data. The output of this document will include UpSet Plots to visualize the common differentially expressed genes within the different CINmetrics, heatmaps of our FGSEA analysis, and bubble plots of our FGSEA analysis.
 
-```{r}
-### Title: Comparing Principal Compenents of Gene Expression Count Data to CIN metrics
-### Written by: Roshan Darji
-### Date: 2018.11.27
-### Goal: Use PCA data from DESeq2 analysis of HT-Seq Counts from TCGA Gene Expression Data and compare that to CIN Metrics using heatmaps of Spearman's correlation and scatter plots
-
-##### Packages #####
-suppressPackageStartupMessages(library(tidyverse))
-suppressPackageStartupMessages(library(data.table))
-suppressPackageStartupMessages(library(viridis))
-
-##### Loading in Data #####
-# Loading in data
-#load("~/K99.TCGA/TCGA.Bases_BP/data/181205_masterCIN_duplicatesRemoved.RData")
-#load("~/K99.TCGA/TCGA.DESeq/data/dupesRemoved_pca.exp.list.RData")
-# Saving
-#save.image(file = "data/181206_dupesRemoved_PCAvsCIN.RData")
-
-# Loading both CIN and PCA data
-load("gene-expression-pca/data/dupesRemoved_pca.exp.list.RData")
-load("cin-metrics/data/master/190114_cin-metrics-master_calcs_tcga.df.RData")
-
-##### Data Prep #####
-tcgaProjects <- as.character(unique(tcga.df$Project))
-
-# Create a list with all of the TCGA CIN metric data
-tcga.list <- list()
-for (cancer in 1:length(tcgaProjects)) {
-  tcga.list[[cancer]] <- tcga.df[tcga.df$Project == tcgaProjects[cancer] &
-                                   (tcga.df$`Sample Type` == "Primary Solid Tumor" | tcga.df$`Sample Type` == "Solid Tissue Normal" | tcga.df$`Sample Type` == "Primary Blood Derived Cancer"), ]
-}
-
-# Naming each list item
-names(tcga.list) <- tcgaProjects
-names(pca.exp.list) <- tcgaProjects
-
-### Number of samples doesn't match for each project between gene expression and maskCNV
-### Furthermore, the IDs don't exactly match either.
-### The following code is to try and pull matches from the Patient ID
-# First lets see which sets have more samples. If all sets have an equal number entries, then all the printed rows should equal 0.
-for (cancer in 1:length(tcgaProjects)) {
-  print(nrow(tcga.list[[cancer]]) - nrow(pca.exp.list[[cancer]]$x))
-}
-# Since we've added Patient IDs to the CIN data, we only need it for the Gene Expression data.
-for (cancer in 1:length(tcgaProjects)) {
-  assign(paste(tcgaProjects[cancer], ".geneExpPCA.ids", sep = ""),
-         str_match(rownames(pca.exp.list[[cancer]]$x), pattern = "[[:upper:]]{4}[-]{1}[[:alnum:]]{2}[-]{1}([[:alnum:]]{4}[-]{1}\\d{2})")[,2])
-}
-geneExpPCA.ids <- list()
-for (cancer in 1:length(tcgaProjects)) {
-  geneExpPCA.ids[[cancer]] <- get(paste(tcgaProjects[cancer], ".geneExpPCA.ids", sep = ""))
-}
-rm(list = ls(pattern = "[A-Z].geneExpPCA"))
-names(geneExpPCA.ids) <- tcgaProjects
-
-for (cancer in 1:length(tcgaProjects)) {
-  assign(paste(tcgaProjects[cancer], ".intersect.ids", sep = ""),
-         dplyr::intersect(x = geneExpPCA.ids[[cancer]],
-                          y = tcga.list[[cancer]][!is.na(tai.3), `Patient ID`]))
-}
-intersect.ids <- list()
-for (cancer in 1:length(tcgaProjects)) {
-  intersect.ids[[cancer]] <- get(paste(tcgaProjects[cancer], ".intersect.ids", sep = ""))
-}
-rm(list = ls(pattern = "[A-Z].intersect.ids"))
-names(intersect.ids) <- tcgaProjects
-
-# Save old TCGA Barcodes and Patient IDs
-pca.rownames.list <- list()
-for (cancer in 1:length(tcgaProjects)) {
-  pca.rownames.list[[cancer]] <- rownames(pca.exp.list[[cancer]]$x)
-  pca.rownames.list[[cancer]] <- stringr::str_match(string = pca.rownames.list[[cancer]],
-                                                    pattern = "[[:upper:]]{4}[-][[:alnum:]]{2}[-]([[:alnum:]]{4}[-][[:alnum:]]{2})[[:alnum:]][-][[:print:]]+")
-  pca.rownames.list[[cancer]] <- as.data.frame(pca.rownames.list[[cancer]])
-  colnames(pca.rownames.list[[cancer]]) <- c("TCGA Barcode", "Patient ID")
-}
-names(pca.rownames.list) <- tcgaProjects
-
-# Replace ids in original lists
-for (cancer in 1:length(tcgaProjects)) {
-  rownames(pca.exp.list[[cancer]]$x) <- geneExpPCA.ids[[cancer]]
-}
-
-# Subsetting the maskCNV samples
-pca.exp.list.subset <- list()
-tcga.list.subset <- list()
-for (cancer in 1:length(tcgaProjects)) {
-  pca.exp.list.subset[[cancer]] <- pca.exp.list[[cancer]]$x[dplyr::intersect(rownames(pca.exp.list[[cancer]]$x), intersect.ids[[cancer]]) , ]
-  tcga.list.subset[[cancer]] <- tcga.list[[cancer]][`Patient ID` %in% dplyr::intersect(tcga.list[[cancer]]$`Patient ID`, intersect.ids[[cancer]])]
-}
-names(pca.exp.list.subset) <- tcgaProjects
-names(tcga.list.subset) <- tcgaProjects
-
-# Checking to make sure that the subset list matches the number of samples in the gene expression set (all rows should = 0)
-for (cancer in 1:length(tcgaProjects)) {
-  print(nrow(tcga.list.subset[[cancer]]) - nrow(pca.exp.list.subset[[cancer]]))
-}
-
-
-### Please refer to 181204_tcgaDuplicateRemoval.R for duplicate removal procedure
-##### Correlations #####
-for (cancer in 1:length(tcgaProjects)) {
-  assign(paste(tcgaProjects[cancer], ".spear", sep = ""),
-         cor(x = tcga.list.subset[[cancer]][ ,5:length(colnames(tcga.list.subset[[cancer]]))],
-             y = pca.exp.list.subset[[cancer]][ ,1:30],
-             method = "spearman"))
-}
-# Creating list object of correlations
-corr.cinPCA.list <- list()
-for (cancer in 1:length(tcgaProjects)) {
-  corr.cinPCA.list[[cancer]] <- get(paste(tcgaProjects[cancer], ".spear", sep = ""))
-}
-rm(list = ls(pattern = "[A-Z].spear"))
-names(corr.cinPCA.list) <- tcgaProjects
-
-# Replacing TCGA Barcodes in PCA subset list
-for (cancer in 1:length(tcgaProjects)) {
-  rownames(pca.exp.list.subset[[cancer]]) <- as.character(pca.rownames.list[[cancer]][pca.rownames.list[[cancer]]$`Patient ID` %in% intersect.ids[[cancer]], 1])
-}
-
-# Removing the extra stuff
-rm(pca.exp.list, tcga.list, geneExpPCA.ids, intersect.ids, pca.rownames.list)
-
-##### Heat Map #####
-pdf(file = "~/K99.TCGA/TCGA.Bases_BP/graphs/181207_PCAvsCIN_heatmaps.pdf",
-    width = 8.5, height = 11)
-for (cancer in 1:length(tcgaProjects)) {
-  gplots::heatmap.2(t(as.matrix(corr.cinPCA.list[[cancer]])),
-                    col = colorRampPalette(c("blue", "black", "yellow")), na.color = "grey", breaks = seq(-0.8,0.8, length.out = 101), symbreaks = TRUE,
-                    dendrogram = "both", density.info = "density",
-                    Rowv = FALSE, Colv = FALSE, scale = "none",
-                    srtCol = 45,
-                    main = paste("\nSpearman's Corrleation of \nCIN Metrics and Principal Components \nof HT-Seq Counts in ", tcgaProjects[cancer]," Samples", sep = ""),
-                    key.xlab = "Spearman's Rho",
-                    key.ylab = NA, key.title = NA, keysize = 1,
-                    cexCol = 1.3, cexRow = 1,
-                    offsetCol = 1, margins = c(9,5), trace = "none")
-}
-dev.off()
-
-##### Data Prep for Correlations by CIN Metric #####
-# Character vector of CIN Metrics
-cinMetrics <- colnames(tcga.df)[5:length(colnames(tcga.df))]
-
-# List object housing correlation data
-corr.metric.list <- list()
-# Create Correlation Matrices 
-for (metric in 1:length(cinMetrics)) {
-  for (cancer in 1:length(tcgaProjects)) {
-    assign(paste(tcgaProjects[cancer],".", cinMetrics[metric], sep = ""),
-           corr.cinPCA.list[[cancer]][metric,])
-  }
-}
-
-# Setting up matrices of correlations organized by CIN metric
-for (metric in 1:length(cinMetrics)) {
-  assign(paste(cinMetrics[metric], ".matrix", sep = ""),
-         matrix(nrow = length(tcga.list.subset),
-                ncol = 30))
-}
-
-# Copying lines from cancer correlation matrices to CIN matricies
-for (cancer in 1:length(tcgaProjects)) {
-  numBases.3.matrix[cancer, ] <- get(paste(names(tcga.list.subset)[cancer], ".numBases.3", sep = ""))
-  numBreakPoints.3.matrix[cancer, ] <- get(paste(names(tcga.list.subset)[cancer], ".numBreakPoints.3", sep = ""))
-  fga.3.matrix[cancer, ] <- get(paste(names(tcga.list.subset)[cancer], ".fga.3", sep = ""))
-  cna.3.matrix[cancer, ] <- get(paste(names(tcga.list.subset)[cancer], ".cna.3", sep = ""))
-  tai.3.matrix[cancer, ] <- get(paste(names(tcga.list.subset)[cancer], ".tai.3", sep = ""))
-  mod.tai.3.matrix[cancer, ] <- get(paste(names(tcga.list.subset)[cancer], ".mod.tai.3", sep = ""))
-}
-
-# Cleaning up cancer matrices
-rm(list = ls(pattern = "^[A-Z]+.[[:print:]]+.3"))
-# Creating a character vector of the PC names
-colnamesPCA <- colnames(pca.exp.list.subset$ACC[,1:30])
-# Assigning row & column names to matrices
-rownames(numBases.3.matrix) <- tcgaProjects; colnames(numBases.3.matrix) <- colnamesPCA
-rownames(numBreakPoints.3.matrix) <- tcgaProjects; colnames(numBreakPoints.3.matrix) <- colnamesPCA
-rownames(fga.3.matrix) <- tcgaProjects; colnames(fga.3.matrix) <- colnamesPCA
-rownames(cna.3.matrix) <- tcgaProjects; colnames(cna.3.matrix) <- colnamesPCA
-rownames(tai.3.matrix) <- tcgaProjects; colnames(tai.3.matrix) <- colnamesPCA
-rownames(mod.tai.3.matrix) <- tcgaProjects; colnames(mod.tai.3.matrix) <- colnamesPCA
-
-# Combining all matrices into a list object
-for (metric in 1:length(cinMetrics)) {
-  corr.metric.list[[metric]] <- get(paste(cinMetrics[metric], ".matrix", sep = ""))
-}
-# Removing individual CIN matrices
-rm(list = ls(pattern = "[[:print:]]+.3.matrix"))
-names(corr.metric.list) <- cinMetrics
-
-# Saving the data
-save.image(file = "gene-expression-pca/data/190115_PCAvsCIN.RData")
-
-##### Heat Map of Correlations by CIN Metric #####
-cinMetricFull <- c("Number of Bases Altered", "Number of Break Points", "Total Aberration Index", "Modified Total Aberration Index", "Copy Number Aberration", "Fraction Genome Altered")
-pdf(file = "gene-expression-pca/graphs/190115_pcaMetric_heatmaps.pdf",
-    width = 8.5, height = 11, compress = FALSE)
-for (metric in 1:length(cinMetrics)) {
-  gplots::heatmap.2(abs(corr.metric.list[[metric]]),
-                    col = viridis::inferno, na.color = "grey", breaks = seq(0,1, length.out = 101), symbreaks = FALSE,
-                    dendrogram = "both", density.info = "histogram",
-                    Rowv = TRUE, Colv = FALSE, scale = "none",
-                    srtCol = 45,
-                    main = paste("\n\nSpearman's Corrleation of \n", cinMetricFull[metric]," and \nPrincipal Components of HT-Seq Counts \nin TCGA Projects", sep = ""),
-                    key.xlab = "Spearman's Rho",
-                    key.ylab = NA, key.title = NA, keysize = 1,
-                    cexCol = 1, cexRow = 1,
-                    sepwidth = c(0,0), sepcolor = NA,
-                    offsetCol = 1, margins = c(9,5), trace = "none")
-  
-}
-dev.off()
-```
-
-```{r}
-### Title: DESeq2 Differential Expression for CIN Metrics in KIRC
-### Written by: Roshan Darji
-### Date: 2019.02.14
-### Goal: Find differentially expressed genes for each CIN metric in KIRC samples
-
-##### Packages #####
-library(tidyverse)
-suppressPackageStartupMessages(library(data.table))
-suppressPackageStartupMessages(library(SummarizedExperiment))
-suppressPackageStartupMessages(library(DESeq2))
-suppressPackageStartupMessages(library(pathfindR))
-suppressPackageStartupMessages(library(TFEA.ChIP))
-suppressPackageStartupMessages(library(fgsea))
-
-##### Load Data #####
-# Load in CIN metric data
-load("cin-metrics/data/master/190206_cin-metrics-master_calcs_tcga.df.RData")
-# Load in gene expression data
-load("general/get-tcga/data/190205_getTCGA-exp_exp.tcga.RData")
-
-##### Prepping the data #####
-# Only running on KIRC data for right now
-exp.kirc <- exp.tcga[, na.omit(exp.tcga@colData$project_id) == "TCGA-KIRC"][, na.omit(exp.tcga[, na.omit(exp.tcga@colData$project_id) == "TCGA-KIRC"]@colData$project_id) == "TCGA-KIRC"] # 598 samples
-kirc.df <- tcga.df[`Sample ID` %in% exp.kirc@colData$sample] # 590 samples
-# I don't know why this happens, but pulling Sample IDs in the first exp.kirc results in 8 missing samples.
-exp.kirc <- exp.tcga[, exp.tcga@colData$sample %in% kirc.df$`Sample ID`] # 590 samples
-
-# Order both by sample so that metrics line up properly
-exp.kirc <- exp.kirc[, order(exp.kirc@colData$sample)]
-setorder(kirc.df,
-         `Sample ID`)
-
-# Removing TCGA objects to save memory
-rm(exp.tcga, tcga.df)
-# Adding CIN metrics to Gene Expression Data 
-exp.kirc@colData <- cbind(exp.kirc@colData, kirc.df[ , 7:12])
-
-# Subsetting tumor samples
-exp.kirc.t <- exp.kirc[, exp.kirc@colData$shortLetterCode == "TP"]
-
-# Removing NA values in covariates
-exp.kirc.t <- exp.kirc.t[, !is.na(exp.kirc.t@colData$age_at_diagnosis)]
-
-##### DESeq2 - Tumor only #####
-dds.kirc.cin.list <- list(numBases = DESeqDataSet(se = na.omit(exp.kirc.t),
-                                                  design = ~ gender + tumor_stage + age_at_diagnosis + numBases.3),
-                          numBreakPoints = DESeqDataSet(se = na.omit(exp.kirc.t),
-                                                        design = ~ gender + tumor_stage + age_at_diagnosis + numBreakPoints.3),
-                          tai = DESeqDataSet(se = na.omit(exp.kirc.t),
-                                             design = ~ gender + tumor_stage + age_at_diagnosis + tai.3),
-                          mod.tai = DESeqDataSet(se = na.omit(exp.kirc.t),
-                                                 design = ~ gender + tumor_stage + age_at_diagnosis + mod.tai.3),
-                          cna = DESeqDataSet(se = na.omit(exp.kirc.t),
-                                             design = ~ gender + tumor_stage + age_at_diagnosis + cna.3),
-                          fga = DESeqDataSet(se = na.omit(exp.kirc.t),
-                                             design = ~ gender + tumor_stage + age_at_diagnosis + fga.3))
-# Running DESeq2
-DESeq.kirc.cin.list <- list(#numBases = DESeq(object = dds.cin.list$numBases),
-  numBreakPoints = DESeq(object = dds.kirc.cin.list$numBreakPoints),
-  tai = DESeq(object = dds.kirc.cin.list$tai),
-  mod.tai = DESeq(object = dds.kirc.cin.list$mod.tai),
-  cna = DESeq(object = dds.kirc.cin.list$cna),
-  fga = DESeq(object = dds.kirc.cin.list$fga))
-# Variance-stabilizing transform
-vst.kirc.cin.list <- list(#numBases = vst(object = DESeq.kirc.cin.list$numBases),
-  numBreakPoints = vst(object = DESeq.kirc.cin.list$numBreakPoints),
-  tai = vst(object = DESeq.kirc.cin.list$tai),
-  mod.tai = vst(object = DESeq.kirc.cin.list$mod.tai),
-  cna = vst(object = DESeq.kirc.cin.list$cna),
-  fga = vst(object = DESeq.kirc.cin.list$fga))
-# Compiling results
-res.kirc.cin.list <- list(#numBases.3 = results(object = DESeq.kirc.cin.list$numBases),
-  numBreakPoints = results(object = DESeq.kirc.cin.list$numBreakPoints),
-  tai = results(object = DESeq.kirc.cin.list$tai),
-  mod.tai = results(object = DESeq.kirc.cin.list$mod.tai),
-  cna = results(object = DESeq.kirc.cin.list$cna),
-  fga = results(object = DESeq.kirc.cin.list$fga))
-
-# Save
-save(dds.kirc.cin.list, DESeq.kirc.cin.list, vst.kirc.cin.list, res.kirc.cin.list,
-     file = "diff-expression/data/190218_deseq2_kirc-cin-test_tumor-lists.RData")
-
-### Other data prep
-l2fc.kirc <- tibble(ensemblid = rownames(res.kirc.cin.list$numBreakPoints),
-                    #numBases = res.kirc.cin.list$numBases@listData$log2FoldChange,
-                    numBreakPoints = res.kirc.cin.list$numBreakPoints@listData$log2FoldChange,
-                    tai = res.kirc.cin.list$tai@listData$log2FoldChange,
-                    mod.tai = res.kirc.cin.list$mod.tai@listData$log2FoldChange,
-                    cna = res.kirc.cin.list$cna@listData$log2FoldChange,
-                    fga = res.kirc.cin.list$fga@listData$log2FoldChange)
-
-### Pulling Gene IDs
-genes.list <- list(numBreakPoints = rownames(res.kirc.cin.list$numBreakPoints[!is.na(res.kirc.cin.list$numBreakPoints$padj) & res.kirc.cin.list$numBreakPoints$padj < 0.05,]),
-                   tai = rownames(res.kirc.cin.list$tai[!is.na(res.kirc.cin.list$tai$padj) & res.kirc.cin.list$tai$padj < 0.05,]),
-                   mod.tai = rownames(res.kirc.cin.list$mod.tai[!is.na(res.kirc.cin.list$mod.tai$padj) & res.kirc.cin.list$mod.tai$padj < 0.05,]),
-                   cna = rownames(res.kirc.cin.list$cna[!is.na(res.kirc.cin.list$cna$padj) & res.kirc.cin.list$cna$padj < 0.05,]),
-                   fga = rownames(res.kirc.cin.list$fga[!is.na(res.kirc.cin.list$fga$padj) & res.kirc.cin.list$fga$padj < 0.05,]))
-
-sig.res.kirc.cin.list <- list(numBreakPoints = res.kirc.cin.list$numBreakPoints[!is.na(res.kirc.cin.list$numBreakPoints$padj) & res.kirc.cin.list$numBreakPoints$padj < 0.05, ],
-                              tai = res.kirc.cin.list$tai[!is.na(res.kirc.cin.list$tai$padj) & res.kirc.cin.list$tai$padj < 0.05, ],
-                              mod.tai = res.kirc.cin.list$mod.tai[!is.na(res.kirc.cin.list$mod.tai$padj) & res.kirc.cin.list$mod.tai$padj < 0.05, ],
-                              cna = res.kirc.cin.list$cna[!is.na(res.kirc.cin.list$cna$padj) & res.kirc.cin.list$cna$padj < 0.05, ],
-                              fga = res.kirc.cin.list$fga[!is.na(res.kirc.cin.list$fga$padj) & res.kirc.cin.list$fga$padj < 0.05, ])
-sig.res.kirc.cin.list <- lapply(sig.res.kirc.cin.list,
-                                function (l) {l[order(abs(l$log2FoldChange), decreasing = TRUE), ]})
-
-### Visualization
-# Scatterplot Matrix
-GGally::ggpairs(data = l2fc.kirc,
-                aes(alpha = 0.01),
-                columns = colnames(l2fc.kirc)[-1],
-                upper = list(continuous = "points"),
-                lower = list(continuous = "points"),
-                title = "Comparison of L2FC of Genes Differentially Expressed by CIN Metric (+ Clinical Covariates) in KIRC")
-# UpSet plot
-UpSetR::upset(data = UpSetR::fromList(genes.list),
-              #order.by = "freq",
-              mainbar.y.label = "Number of Overlapping Genes", sets.x.label = "Number of Significant Genes")
-
-### Pathway Analysis
-cinMetrics <- c("numBases", "numBreakPoints", "tai", "mod.tai", "cna", "fga")
-hgnc.list <- lapply(genes.list,
-                    function (l){
-                      exp.kirc.t@rowRanges@elementMetadata[exp.kirc.t@rowRanges@elementMetadata$ensembl_gene_id %in% l,]
-                    })
-# Formatting input
-pathfindR.input.list <- list(numBreakPoints = data.frame(hgncGeneSymbol= hgnc.list$numBreakPoints$external_gene_name,
-                                                         log2FoldChange = sig.res.kirc.cin.list$numBreakPoints$log2FoldChange,
-                                                         padj = sig.res.kirc.cin.list$numBreakPoints$padj),
-                             tai = data.frame(hgncGeneSymbol= hgnc.list$tai$external_gene_name,
-                                              log2FoldChange = sig.res.kirc.cin.list$tai$log2FoldChange,
-                                              padj = sig.res.kirc.cin.list$tai$padj),
-                             #mod.tai = data.frame(hgncGeneSymbol= hgnc.list$mod.tai$external_gene_name,
-                             #                  log2FoldChange = sig.res.kirc.cin.list$mod.tai$log2FoldChange,
-                             #                  padj = sig.res.kirc.cin.list$mod.tai$padj),
-                             cna = data.frame(hgncGeneSymbol= hgnc.list$cna$external_gene_name,
-                                              log2FoldChange = sig.res.kirc.cin.list$cna$log2FoldChange,
-                                              padj = sig.res.kirc.cin.list$cna$padj),
-                             fga = data.frame(hgncGeneSymbol= hgnc.list$fga$external_gene_name,
-                                              log2FoldChange = sig.res.kirc.cin.list$fga$log2FoldChange,
-                                              padj = sig.res.kirc.cin.list$fga$padj))
-# Running pathway analysis
-pathfindR.result.list <- list(numBreakPoints = run_pathfindR(pathfindR.input.list$numBreakPoints,
-                                                             output_dir = "diff-expression/data/pathfindR/190218_deseq2_kirc-cin_numBreakPoints"),
-                              tai = run_pathfindR(pathfindR.input.list$tai,
-                                                  output_dir = "diff-expression/data/pathfindR/190218_deseq2_kirc-cin_tai"),
-                              cna = run_pathfindR(pathfindR.input.list$cna,
-                                                  output_dir = "diff-expression/data/pathfindR/190218_deseq2_kirc-cin_cna"),
-                              fga = run_pathfindR(pathfindR.input.list$fga,
-                                                  output_dir = "diff-expression/data/pathfindR/190218_deseq2_kirc-cin_fga"))
-# Simulated Annealing Active Subnetwork search
-pathfindR.sa.list <- list(numBreakPoints = run_pathfindR(pathfindR.input.list$numBreakPoints,
-                                                         output_dir = "diff-expression/data/pathfindR/190306_deseq2_kirc-cin_numBreakPoints",
-                                                         search_method = "SA"),
-                          tai = run_pathfindR(pathfindR.input.list$tai,
-                                              output_dir = "diff-expression/data/pathfindR/190306_deseq2_kirc-cin_tai",
-                                              search_method = "SA"),
-                          cna = run_pathfindR(pathfindR.input.list$cna,
-                                              output_dir = "diff-expression/data/pathfindR/190306_deseq2_kirc-cin_cna",
-                                              search_method = "SA"),
-                          fga = run_pathfindR(pathfindR.input.list$fga,
-                                              output_dir = "diff-expression/data/pathfindR/190306_deseq2_kirc-cin_fga",
-                                              search_method = "SA"))
-
-pathfindR.gen.list <- list(numBreakPoints = run_pathfindR(pathfindR.input.list$numBreakPoints,
-                                                         output_dir = "diff-expression/data/pathfindR/190306_deseq2_kirc-cin_numBreakPoints",
-                                                         search_method = "GA"),
-                          tai = run_pathfindR(pathfindR.input.list$tai,
-                                              output_dir = "diff-expression/data/pathfindR/190306_deseq2_kirc-cin_tai",
-                                              search_method = "GA"),
-                          cna = run_pathfindR(pathfindR.input.list$cna,
-                                              output_dir = "diff-expression/data/pathfindR/190306_deseq2_kirc-cin_cna",
-                                              search_method = "GA"),
-                          fga = run_pathfindR(pathfindR.input.list$fga,
-                                              output_dir = "diff-expression/data/pathfindR/190306_deseq2_kirc-cin_fga",
-                                              search_method = "GA"))
-
-pathfindR.result.list <- lapply(pathfindR.result.list, as_tibble)
-# Cluster pathways
-pathfindR.cluster.list <- list(numBreakPoints = cluster_pathways(enrichment_res = pathfindR.result.list$numBreakPoints,
-                                                              use_names = TRUE, plot_hmap = TRUE, plot_dend = TRUE),
-                            tai = cluster_pathways(enrichment_res = pathfindR.result.list$tai,
-                                                              use_names = TRUE, plot_hmap = TRUE, plot_dend = TRUE),
-                            cna = cluster_pathways(enrichment_res = pathfindR.result.list$cna,
-                                                              use_names = TRUE, plot_hmap = TRUE, plot_dend = TRUE),
-                            fga = cluster_pathways(enrichment_res = pathfindR.result.list$fga,
-                                                              use_names = TRUE, plot_hmap = TRUE, plot_dend = TRUE))
-# Saving the data
-save(pathfindR.input.list, pathfindR.result.list, pathfindR.cluster.list,
-     file = "diff-expression/data/190218_deseq2_kirc-cin_pathfindR.RData")
-
-# Comparing common pathways
-pathways.list <- list(numBreakPoints = pathfindR.result.list$numBreakPoints$Pathway,
-                      tai = pathfindR.result.list$tai$Pathway,
-                      cna = pathfindR.result.list$cna$Pathway,
-                      fga = pathfindR.result.list$fga$Pathway)
-UpSetR::upset(data = UpSetR::fromList(pathways.list),
-              #order.by = "freq",
-              mainbar.y.label = "Number of Common Pathways", sets.x.label = "Number of Significant Pathways")
-
-### Transcription Factor Analysis
-# Formatting inputs
-tfea.input.list <- lapply(res.kirc.cin.list, preprocessInputData)
-genes.up.list <- lapply(tfea.input.list,
-                        function(l) {
-                          Select_genes(na.omit(l), min_LFC = 1)
-                        })
-genes.down.list <- lapply(tfea.input.list,
-                          function(l) {
-                            Select_genes(na.omit(l), max_LFC = -1)
-                          })
-genes.control.list <- lapply(tfea.input.list,
-                             function(l) {
-                               Select_genes(na.omit(l), min_pval = 0.5, max_pval = 1,
-                                            min_LFC = -0.25, max_LFC = 0.25)
-                             })
-# Contingency Matrix
-cm.up.list <- list(numBreakPoints = contingency_matrix(na.omit(genes.up.list$numBreakPoints), na.omit(genes.control.list$numBreakPoints)),
-                   tai = contingency_matrix(genes.up.list$tai, genes.control.list$tai),
-                   mod.tai = contingency_matrix(genes.up.list$mod.tai, genes.control.list$mod.tai),
-                   cna = contingency_matrix(genes.up.list$cna, genes.control.list$cna),
-                   fga = contingency_matrix(genes.up.list$fga, genes.control.list$fga))
-cm.down.list <- mapply(FUN = function(l,m) {contingency_matrix(l,m)},
-                       genes.down.list, genes.control.list,
-                       SIMPLIFY = FALSE)
-# Fisher's exact test
-pval.up.list <- lapply(cm.up.list,
-                       function (l) {
-                         getCMstats(l) %>%
-                           as_tibble()
-                       })
-pval.down.list <- lapply(cm.down.list,
-                         function (l) {
-                           getCMstats(l) %>%
-                             as_tibble()
-                         })
-# Plot
-plot_CM(pval.up.list$tai, plot_title = "TAI-up")
-plot_CM(pval.up.list$mod.tai, plot_title = "Mod.TAI-up")
-plot_CM(pval.up.list$cna, plot_title = "CNA-up")
-plot_CM(pval.up.list$fga, plot_title = "FGA-up")
-plot_CM(pval.down.list$numBreakPoints, plot_title = "numBreakPoints-down")
-plot_CM(pval.down.list$tai, plot_title = "TAI-down")
-plot_CM(pval.down.list$mod.tai, plot_title = "Mod.TAI-down")
-plot_CM(pval.down.list$cna, plot_title = "CNA-down")
-plot_CM(pval.down.list$fga, plot_title = "FGA-down")
-
-# GSEA analysis 
-gsea.res.list <- lapply(tfea.input.list,
-                        function(l){
-                          GSEA_run(l$Genes, l$log2FoldChange, get.RES = TRUE)
-                        })
-
-# Saving the data
-save(tfea.input.list, genes.up.list, genes.down.list, genes.control.list,
-     cm.up.list, cm.down.list, pval.up.list, pval.down.list, gsea.res.list,
-     file = "diff-expression/data/190218_deseq2_kirc-cin_tfea.chip.RData")
-
-### fgsea
-fgsea.input <- lapply(res.kirc.cin.list,
-                      function (l) {
-                        l <- rownames_to_column(as.data.frame(l))
-                        l <- cbind(l, external_gene_name = exp.kirc.t@rowRanges@elementMetadata$external_gene_name)
-                        res <- l %>%
-                          dplyr::select(external_gene_name, stat) %>%
-                          na.omit() %>%
-                          distinct() %>%
-                          group_by(external_gene_name)
-                        ranks <- deframe(res)
-                        return(ranks)
-                      })
-# Load pathways into a named list
-pathway.hallmark <- gmtPathways("diff-expression/data/h.all.v6.2.symbols.gmt")
-pathway.kegg <- gmtPathways("diff-expression/data/c2.cp.kegg.v6.2.symbols.gmt")
-pathway.reactome <- gmtPathways("diff-expression/data/c2.cp.reactome.v6.2.symbols.gmt")
-pathway.go <- gmtPathways("diff-expression/data/c5.all.v6.2.symbols.gmt")
-# Run fgsea with 1000 permutations
-fgsea.hallmark <- lapply(fgsea.input,
-                         function (l){
-                           fgsea(pathways = pathway.hallmark, stats = l, nperm = 10000) %>%
-                             as_tibble() %>%
-                             arrange(desc(abs(NES)), padj)
-                         })
-fgsea.kegg <- lapply(fgsea.input,
-                     function (l){
-                       fgsea(pathways = pathway.kegg, stats = l, nperm = 10000) %>%
-                         as_tibble() %>%
-                         arrange(desc(abs(NES)), padj)
-                     })
-fgsea.reactome <- lapply(fgsea.input,
-                         function (l){
-                           fgsea(pathways = pathway.reactome, stats = l, nperm = 10000) %>%
-                             as_tibble() %>%
-                             arrange(desc(abs(NES)), padj)
-                         })
-fgsea.go <- lapply(fgsea.input,
-                   function (l){
-                     fgsea(pathways = pathway.go, stats = l, nperm = 10000) %>%
-                       as_tibble() %>%
-                       arrange(desc(abs(NES)), padj)
-                   })
-# Subset significant pathways
-sig.fgsea.hallmark <- lapply(fgsea.hallmark,
-                             function (l) {
-                               l[l$padj < 0.05, ]
-                             })
-sig.fgsea.kegg <- lapply(fgsea.kegg,
-                             function (l) {
-                               l[l$padj < 0.05, ]
-                             })
-sig.fgsea.reactome <- lapply(fgsea.reactome,
-                         function (l) {
-                           l[l$padj < 0.05, ]
-                         })
-sig.fgsea.go <- lapply(fgsea.go,
-                             function (l) {
-                               l[l$padj < 0.05, ]
-                             })
-# Visualize
-# Hallmark
-lapply(names(fgsea.hallmark),
-       function (l) {
-         ggplot(fgsea.hallmark[[l]], aes(reorder(pathway, NES), NES)) +
-           geom_col(aes(fill = padj < 0.05)) +
-           coord_flip() +
-           labs(x="", y="Normalized Enrichment Score",
-                title= paste("Hallmark pathways NES from GSEA - ", l, sep = "")) + 
-           theme_minimal()
-       })
-# KEGG
-lapply(names(sig.fgsea.kegg),
-       function (l) {
-         ggplot(sig.fgsea.kegg[[l]][1:50, ], aes(reorder(pathway, NES), NES)) +
-           geom_col() +
-           coord_flip() +
-           labs(x="", y="Normalized Enrichment Score",
-                title= paste("KEGG pathways NES from GSEA - ", l, sep = "")) + 
-           theme_minimal()
-       })
-lapply(names(fgsea.reactome),
-       function (l) {
-         ggplot(fgsea.reactome[[l]][1:50, ], aes(reorder(pathway, NES), NES)) +
-           geom_col(aes(fill = padj < 0.05)) +
-           coord_flip() +
-           labs(x="", y="Normalized Enrichment Score",
-                title= paste("Reactome pathways NES from GSEA - ", l, sep = "")) + 
-           theme_minimal()
-       })
-lapply(names(fgsea.go),
-       function (l) {
-         ggplot(fgsea.go[[l]][1:50, ], aes(reorder(pathway, NES), NES)) +
-           geom_col(aes(fill = padj < 0.05)) +
-           coord_flip() +
-           labs(x="", y="Normalized Enrichment Score",
-                title= paste("GO pathways NES from GSEA - ", l, sep = "")) + 
-           theme_minimal()
-       })
-
-# Save
-save(fgsea.input, fgsea.hallmark, fgsea.kegg, fgsea.reactome, fgsea.go,
-     pathway.hallmark, pathway.kegg, pathway.reactome, pathway.go,
-     sig.fgsea.hallmark, sig.fgsea.kegg, sig.fgsea.reactome, sig.fgsea.go,
-     file = "diff-expression/data/190220_deseq2_kirc-cin_fgsea.RData")
-```
 
 -------------------------------------------------------------
 # CINmetrics and Gene Expression Analysis
 
 ```{r}
 library(tidyverse)
+library(fgsea)
+library(ComplexHeatmap)
+library(data.table)
+library(ggplot2)
+library(reactome.db)
+library(AnnotationDbi)
+library(org.Hs.eg.db)
+library(circlize)
+library(KEGG.db)
+library(hrbrthemes)
+library(ggpubr)
+
 ```
 
 # UpsetPlots
 ```{r}
-
+# Here we load all.gex.list which was created in the CINmetrics_analysis_pi.Rmd
 load(all.gex.list)
 
 # The function creates an Upset Plot of the overlapping differentially expressed genes using the CINmetrics as a condition
@@ -610,7 +42,7 @@ get_gex_upsetplots <- function(cancer.project){
     cancer.cinmetrics.df <- cancer.cinmetrics.df[sample_id %in% cancer.gex@colData$sample]
     cancer.gex <-  cancer.gex[, cancer.gex@colData$sample %in% cancer.cinmetrics.df$sample_id]
     
-    # Order both by sample so metrics line up properly 
+    # Ordering both by sample so metrics line up properly 
     cancer.gex <- cancer.gex[, order(cancer.gex@colData$sample)]
     setorder(cancer.cinmetrics.df,
          sample_id)
@@ -699,3 +131,427 @@ get_gex_upsetplots <- function(cancer.project){
 
 ```
 
+------------------------------------------------------------------------
+Gene Expression Analysis -- fgsea across pan cancer types
+
+## Pathway Heatmaps
+```{r}
+# This function takes the gene.list created from the NMF data, obtains the FGSEA, and produces a heatmap to compare the pathways between cancer projects.
+
+get_pathway_heatmaps <- function(gene.list, cancer.project = "all", metrics = "all", pathway) {
+# Here we are subsetting the gene list by CINmetric 
+  if (metrics == "tai") {
+    cinmetric.gene.list <- gene.list[grep("tai", gene.list$cinmetric),]
+  } else if (metrics == "cna") {
+    cinmetric.gene.list <- gene.list[grep("cna", gene.list$cinmetric),]
+  } else if (metrics == "base_segments") {
+    cinmetric.gene.list <- gene.list[grep("base_segments", gene.list$cinmetric),]
+  } else if (metrics == "break_points") {
+    cinmetric.gene.list <- gene.list[grep("break_points", gene.list$cinmetric),]
+  } else if (metrics == "fga") {
+    cinmetric.gene.list <- gene.list[grep("fga", gene.list$cinmetric),]
+  } else{
+    cinmetric.gene.list <- gene.list
+  }
+  
+# now we have our subsetted full dataframe, time to do pathway analysis
+  # start with converting ens IDs to entrez
+    cinmetric.gene.list$entrez = mapIds(org.Hs.eg.db,
+                      keys=cinmetric.gene.list$geneid, #Column containing Ensembl gene ids
+                      column="ENTREZID",
+                      keytype="ENSEMBL",
+                      multiVals="first")
+  
+    common.fgsea.df <- data.frame(pathway = character())
+    for(i in 1:length(cancer.project)){
+      # Generating pathways and stats ranks objects for each cancer
+      cancer.subset <- subset(cinmetric.gene.list, cancer == cancer.project[i]) %>% drop_na()
+      cancer.entrez <- t(cancer.subset$entrez) %>% as.character(.) 
+      # Choosing database for pathways
+      if(pathway == "reactome"){
+      pathways <-  reactomePathways(cancer.entrez)
+      }else if(pathway == "kegg"){
+      load_kegglist <- function(org){
+        kegg_gene_list <- as.list(KEGGPATHID2EXTID) # All organisms in Kegg
+        kegg_gene_list <- kegg_gene_list[grepl(org, names(kegg_gene_list))] # Only human
+        kegg_name_list <- unlist(as.list(KEGGPATHID2NAME)) # All organisms in Kegg
+        kegg_name_list <- kegg_name_list[gsub(paste0("^", org), "", names(kegg_gene_list))]
+        names(kegg_gene_list) <- paste0(names(kegg_gene_list), " (", names(kegg_name_list), ") - ", kegg_name_list)
+        return(kegg_gene_list)
+      }
+      pathways <- load_kegglist(org = "hsa")
+      }
+      
+      cancer.direction.entrez <- cancer.subset %>% dplyr::select(direction, entrez) %>% arrange(., desc(direction))
+      cancer.direction <- cbind(as.double(cancer.direction.entrez$direction), 1)
+      rownames(cancer.direction) <- cancer.direction.entrez$entrez
+      stats <- cancer.direction[,1]
+      
+      # Running fgsea
+      if(pathway == "reactome"){
+      fgsea.result <- fgsea(pathways = pathways, 
+                  stats    = stats,
+                  minSize  = 15,
+                  maxSize  = 500)
+      } else if(pathway == "kegg"){
+        fgsea.result <- fgsea(pathways = pathways, 
+                  stats    = stats,
+                  minSize  = 5,
+                  maxSize  = 500)
+      }
+      cancer.nes <- fgsea.result %>% dplyr::select(pathway, NES)
+      colnames(cancer.nes) <- c("pathway", cancer.project[i])
+      
+      if(length(cancer.project) >= 2){
+      # If there are multiple cancers being compared
+      common.fgsea.df <- full_join(common.fgsea.df, cancer.nes, by = c("pathway")) %>% drop_na()
+      } else{
+      # If there is only one cancer 
+      common.fgsea.df <- cancer.nes
+      }
+    }
+    
+    # Creating Heatmap
+    common.fgsea.df <- column_to_rownames(common.fgsea.df, "pathway")
+    heatmap.colors <- colorRamp2(c(-1, 0, 1), c("#709AE1FF","#FFFFFF",  "#FED439FF"))
+    pathways.heatmap <- Heatmap(common.fgsea.df,
+                                width = ncol(spearman.tumor.cinmetrics)*unit(5, "mm"),
+                                height = nrow(spearman.tumor.cinmetrics)*unit(20, "mm"),
+                                col = heatmap.colors,
+                                show_row_dend = FALSE,
+                                show_column_dend = FALSE, 
+                                column_title = paste(paste("Pathways Heatmap", "(", sep = " "), metrics, ")", sep = ""),
+                                column_names_gp = gpar(fontsize = 7, fontface = "bold"),
+                                row_title = paste(paste("Pathways", "(", sep = " "), pathway, ")", sep = ""),
+                                row_names_gp = gpar(fontsize = 4, fontface = "bold"), 
+                                column_names_rot = 45,
+                                heatmap_legend_param = list(title = "NES", title_gp = gpar(fontsize = 7, fontface = "bold"))
+                                )
+
+    return(pathways.heatmap)
+}
+
+
+# Here, we make multiple heatmaps for each pathway
+metrics <- list("tai", "modified_tai", "cna","base_segments", "break_points", "fga")
+pathway <- list("reactome", "kegg")
+
+# Glioma
+for(i in metrics){
+  for(j in pathway){
+    heatmap <- get_pathway_heatmaps(glioma.gene.list, cancer.project = c("TCGA-GBM", "TCGA-LGG"), metrics = i, pathway = j)
+    file_name = paste("gliomaheatmap_", i,  j, ".pdf", sep = "")
+  pdf(file_name)
+  print(heatmap)
+  dev.off()
+  }
+}
+
+# GI
+for(i in metrics){
+  for(j in pathway){
+    heatmap <- get_pathway_heatmaps(except.glioma.gene.list, cancer.project = c("TCGA-READ", "TCGA-STAD", "TCGA-COAD", "TCGA-ESCA"), metrics = i, pathway = j)
+    file_name = paste("giheatmap_", i,  j, ".pdf", sep = "")
+  pdf(file_name)
+  print(heatmap)
+  dev.off()
+  }
+}
+
+# Kidney
+for(i in metrics){
+  for(j in pathway){
+    heatmap <- get_pathway_heatmaps(except.glioma.gene.list, cancer.project = c("TCGA-KIRC", "TCGA-KIRP"), metrics = i, pathway = j)
+    file_name = paste("kidneyheatmap_", i,  j, ".pdf", sep = "")
+  pdf(file_name)
+  print(heatmap)
+  dev.off()
+  }
+}
+
+# Gyn
+for(i in metrics){
+  for(j in pathway){
+    heatmap <- get_pathway_heatmaps(except.glioma.gene.list, cancer.project = c("TCGA-BRCA", "TCGA-OV", "TCGA-UCS", "TCGA-UCEC", "TCGA-CESC"), metrics = i, pathway = j)
+    file_name = paste("gynheatmap_", i,  j, ".pdf", sep = "")
+  pdf(file_name)
+  print(heatmap)
+  dev.off()
+  }
+}
+
+# Squamous Cell
+for(i in metrics){
+  for(j in pathway){
+    heatmap <- get_pathway_heatmaps(except.glioma.gene.list, cancer.project = c("TCGA-LUSC", "TCGA-HNSC", "TCGA-CESC", "TCGA-ESCA", "TCGA-BLCA"), metrics = i, pathway = j)
+    file_name = paste("squamousheatmap_", i,  j, ".pdf", sep = "")
+  pdf(file_name)
+  print(heatmap)
+  dev.off()
+  }
+}
+
+
+```
+
+
+
+## Pathway Analysis for FGSEA
+```{r}
+# This function takes the gene.list created from the NMF data, obtains the FGSEA results
+
+get_pathway_analysis <- function(gene.list, cancer.project, metrics = c("tai", "cna","base_segments", "break_points", "fga"), pathway) {
+
+
+  # Subset by cancer.project
+  cancer.gene.list <- subset(gene.list, cancer == cancer.project) %>% drop_na()
+  
+  # Convert ENSEMBL IDs to ENTREZ for Kegg Pathways
+    cancer.gene.list$entrez = mapIds(org.Hs.eg.db,
+                      keys=cancer.gene.list$geneid, #Column containing Ensembl gene ids
+                      column="ENTREZID",
+                      keytype="ENSEMBL",
+                      multiVals="first")
+    # Creating an empty dataframe to store fgsea analysis
+    cancer.fgsea.df <- data.frame(pathway = character())
+    
+    for(i in 1:length(metrics)){
+      # Generating pathways and stats ranks objects for each cancer
+      metric.subset <- dplyr::filter(cancer.gene.list, cinmetric == metrics[i]) %>% drop_na()
+      metric.entrez <- t(metric.subset$entrez) %>% as.character(.) 
+      # Obtaining Kegg Pathways
+      load_kegglist <- function(org){
+        kegg_gene_list <- as.list(KEGGPATHID2EXTID) # All organisms in Kegg
+        kegg_gene_list <- kegg_gene_list[grepl(org, names(kegg_gene_list))] # Only human
+        kegg_name_list <- unlist(as.list(KEGGPATHID2NAME)) # All organisms in Kegg
+        kegg_name_list <- kegg_name_list[gsub(paste0("^", org), "", names(kegg_gene_list))]
+        names(kegg_gene_list) <- paste0(names(kegg_gene_list), " (", names(kegg_name_list), ") - ", kegg_name_list)
+      return(kegg_gene_list)
+      }
+      pathways <- load_kegglist(org = "hsa")
+      metric.direction.entrez <- metric.subset %>% dplyr::select(direction, entrez) %>% arrange(., desc(direction))
+      metric.direction <- cbind(as.double(metric.direction.entrez$direction), 1)
+      rownames(metric.direction) <- metric.direction.entrez$entrez
+      stats <- metric.direction[,1]
+      
+      # Performing FSEA
+      fgsea.result <- fgsea(pathways = pathways, 
+                  stats    = stats,
+                  minSize  = 5,
+                  maxSize  = 200)
+      metric.nes <- fgsea.result %>% dplyr::select(pathway, size, padj, NES) 
+      
+      #colnames(metric.nes) <- c("pathway", paste("size", metrics[i], sep = "_"), paste("padj", metrics[i], sep = "_"), metrics[i])
+      metric.nes$cinmetric <- metrics[i]
+      if(length(metrics) >= 2){
+      # If there are multiple metrics being compared
+      cancer.fgsea.df <- rbind(cancer.fgsea.d2f, metric.nes) 
+     } else{
+      # If there is only one metric
+      cancer.fgsea.df <- metric.nes
+     }
+      
+    }
+      cancer.fgsea.df$project <- cancer.project
+      return(cancer.fgsea.df)
+    }
+    
+
+
+# Creating NES dfs for each cancer out of the gene list 
+for (i in cancer.project){
+  nes.df <- get_pathway_analysis(gene.list, cancer.project =  i, metrics = c("tai", "cna","base_segments", "break_points", "fga"), pathway = "kegg")
+  assign(paste(tolower(gsub("TCGA-", "", i)), "nes.df", sep = "."), nes.df) 
+}
+
+all.nes.df <- do.call("rbind",mget(ls(pattern = "*.nes.df")))
+
+
+```
+
+## FGSEA Bubble plots
+```{r}
+# This function takes the pathway analysis df output from the previous function and creates bubble plots of the pathway analysis by metric. The size of the bubble represents the number of genes in that particular pathway mapped. Code adapted from:
+
+get_pathway_bubbleplot <- function(nes.df, cancer.project, metrics){
+  
+  # Here we set the size of the bubble plot
+  aspect <- 3
+  # Here we subset the nes.df to have the specific information we need for our bubble plot
+  metric.nes.df <- nes.df %>% dplyr::select(pathway, size, padj, NES, cinmetric) %>% as.data.frame()
+  
+  # This code is commented out, but this can be included to have the fdr.cutoff. Make sure to fix the variable name in the next line of code after this line. Specifically, change metric.nes.df to filtered.nes.df
+  #filtered.nes.df <- renamed.nes.df[renamed.nes.df[,"padj"] < fdr.cutoff,]
+  
+  # Here we order the df by padj value
+  ordered.nes.df <- metric.nes.df[order(metric.nes.df["padj",])]
+
+  # Here we plot our FGSEA analysis
+  bubbleplot <- ggplot(ordered.nes.df, aes(x = NES, 
+                                            y = pathway, 
+                                            size = size)) +
+    geom_point(aes(fill = cinmetric, colour = cinmetric),
+                   shape = 21) +
+    labs(title = cancer.project,
+              #subtitle = metrics[i],
+              caption = "Using FGSEA across all CINmetrics") +
+    theme_ipsum() +
+    #xlim(0, fdr.cutoff) +
+    #scale_size_area(max_size = 10, guide = "none") +
+    scale_size(range = c(1, 10), name ="Number of Genes Mapped") +
+    #scale_fill_gradient2(low = neg.nes, mid = "white", high = pos.nes) + 
+    #theme(axis.text.y = element_text(color = pathway.color)) +
+    theme(axis.text.y = element_text(size = 7))
+  
+  return(bubbleplot)
+  
+}
+
+
+# Creating bubble plot variables for each cancer project
+cancer.project <- c("TCGA-KIRC", "TCGA-BRCA", "TCGA-SARC", "TCGA-MESO", "TCGA-READ", "TCGA-KIRP", "TCGA-PAAD", "TCGA-GBM", "TCGA-ACC", "TCGA-CESC", "TCGA-ESCA", "TCGA-DLBC", "TCGA-KICH", "TCGA-UVM", "TCGA-LAML", "TCGA-SKCM", "TCGA-PCPG", "TCGA-COAD", "TCGA-UCS", "TCGA-LUSC", "TCGA-LGG", "TCGA-HNSC", "TCGA-TGCT", "TCGA-THCA", "TCGA-LIHC", "TCGA-BLCA", "TCGA-UCEC", "TCGA-PRAD", "TCGA-OV", "TCGA-THYM", "TCGA-CHOL", "TCGA-STAD", "TCGA-LUAD")
+
+for(i in cancer.project){
+  # Subsetting by cancer
+  cancer.nes.df <- subset(all.nes.df, project == i) 
+  bubbleplot <- get_pathway_bubbleplot(cancer.nes.df, cancer.project = i, metrics)
+  assign(paste(tolower(gsub("TCGA-", "", i)), "bubbleplot", sep = "."), bubbleplot)
+}
+
+# Here we can group plots based on cancer bucket
+# Kidney Plot
+kidney.bubbleplot <-  ggarrange(kirc.bubbleplot,
+                                kirp.bubbleplot, 
+                                   ncol = 2, nrow = 1, 
+                                   legend = "right",
+                                   common.legend = TRUE)
+# Glioma Plot
+glioma.bubbleplot <-  ggarrange(lgg.bubbleplot,
+                                gbm.bubbleplot, 
+                                   ncol = 2, nrow = 1, 
+                                   legend = "right",
+                                   common.legend = TRUE)
+
+# GI Plot
+gi.bubbleplot <-  ggarrange(read.bubbleplot,
+                            stad.bubbleplot, 
+                            coad.bubbleplot,
+                            esca.bubbleplot,
+                            ncol = 2, nrow = 2,
+                            legend = "right",
+                            common.legend = TRUE)
+
+# Squamous Plot
+squamous.bubbleplot <- ggarrange(lusc.bubbleplot,
+                                 hnsc.bubbleplot, 
+                                 cesc.bubbleplot,
+                                 esca.bubbleplot,
+                                 blca.bubbleplot,
+                                 ncol = 3, nrow = 2,
+                                 legend = "right",
+                                 common.legend = TRUE)
+
+# Gyn Plot
+gyn.bubbleplot <- ggarrange(brca.bubbleplot,
+                            ov.bubbleplot,
+                            ucs.bubbleplot,
+                            ucec.bubbleplot,
+                            cesc.bubbleplot,
+                            ncol = 3, nrow = 2,
+                            legend = "right",
+                            common.legend = TRUE)
+
+
+
+
+
+
+
+```
+
+
+## Testing out intersecting genes 
+```{r}
+# This function takes the gene.list created from the NMF data, intersects with common genes based on analysis, and obtains the FGSEA. This is not completed because I was having trouble figuring out how to make this code functional for any metric or cancer. 
+
+get_intersecting_fgsea <- function(gene.list, cancer.project, metrics = c("tai", "cna","base_segments", "break_points", "fga"), pathway){
+  
+  # Filtering gene lists based on cancer.project and finding duplicates
+  filtered.gene.list <- gene.list %>% filter(., cancer %in% cancer.project)
+  for (i in length(metrics)){
+  
+  
+  
+#   # Subset by cancer.project
+#   cancer1.gene.list <- subset(gene.list, cancer == cancer.project[1]) %>% drop_na() %>% dplyr::select(-cancer)
+#   colnames(cancer1.gene.list) <- c("geneid", paste("direction", tolower(gsub("TCGA-", "", cancer.project[1])), sep = "_"), paste("pvalue", tolower(gsub("TCGA-", "", cancer.project[1])), sep = "_"), "cinmetric")
+# 
+#   cancer2.gene.list <- subset(gene.list, cancer == cancer.project[2]) %>% drop_na() %>% dplyr::select(-cancer)
+#   colnames(cancer2.gene.list) <- c("geneid", paste("direction", tolower(gsub("TCGA-", "", cancer.project[2])), sep = "_"), paste("pvalue", tolower(gsub("TCGA-", "", cancer.project[2])), sep = "_"), "cinmetric")
+# 
+#   # Intersecting between the genes
+#   intersected.gene.list <- merge(cancer1.gene.list, cancer2.gene.list, by.x = c("geneid", "cinmetric"), by.y = c("geneid", "cinmetric"))
+                  
+  return(filtered.gene.list) 
+}
+
+
+test.glioma.duplicated.genes <- get_intersecting_fgsea(gene.list, cancer.project = c("TCGA-GBM", "TCGA-LGG"))
+
+# 
+# 
+# test <- get_intersecting_fgsea(gene.list, cancer.)
+# 
+#   # Convert ENSEMBL IDs to ENTREZ for Kegg Pathways
+#     intersected.gene.list$entrez = mapIds(org.Hs.eg.db,
+#                       keys=cancer.gene.list$geneid, #Column containing Ensembl gene ids
+#                       column="ENTREZID",
+#                       keytype="ENSEMBL",
+#                       multiVals="first")
+#     # Creating an empty dataframe to store fgsea analysis
+#     cancer1.fgsea.df <- data.frame(pathway = character())
+#     cancer.projects <- c(cancer.project1, cancer.project2)
+#     
+#     for(i in 1:length(metrics)){
+#       # Generating pathways and stats ranks objects for each cancer
+#       metric.subset <- dplyr::filter(cancer.gene.list, cinmetric == metrics[i]) %>% drop_na()
+#       metric.entrez <- t(metric.subset$entrez) %>% as.character(.) 
+#       # Obtaining Kegg Pathways
+#       load_kegglist <- function(org){
+#         kegg_gene_list <- as.list(KEGGPATHID2EXTID) # All organisms in Kegg
+#         kegg_gene_list <- kegg_gene_list[grepl(org, names(kegg_gene_list))] # Only human
+#         kegg_name_list <- unlist(as.list(KEGGPATHID2NAME)) # All organisms in Kegg
+#         kegg_name_list <- kegg_name_list[gsub(paste0("^", org), "", names(kegg_gene_list))]
+#         names(kegg_gene_list) <- paste0(names(kegg_gene_list), " (", names(kegg_name_list), ") - ", kegg_name_list)
+#       return(kegg_gene_list)
+#       }
+#       pathways <- load_kegglist(org = "hsa")
+#       metric.direction.entrez <- metric.subset %>% dplyr::select(direction, entrez) %>% arrange(., desc(direction))
+#       metric.direction <- cbind(as.double(metric.direction.entrez$direction), 1)
+#       rownames(metric.direction) <- metric.direction.entrez$entrez
+#       stats <- metric.direction[,1]
+#       
+#       # Performing FSEA
+#       fgsea.result <- fgsea(pathways = pathways, 
+#                   stats    = stats,
+#                   minSize  = 5,
+#                   maxSize  = 200)
+#       metric.nes <- fgsea.result %>% dplyr::select(pathway, size, padj, NES) 
+#       #return(metric.nes)
+#       #colnames(metric.nes) <- c("pathway", paste("size", metrics[i], sep = "_"), paste("padj", metrics[i], sep = "_"), metrics[i])
+#       metric.nes$cinmetric <- metrics[i]
+#       
+#       if(length(metrics) >= 2){
+#       # If there are multiple metrics being compared
+#       cancer.fgsea.df <- rbind(cancer.fgsea.df, metric.nes) 
+#      } else{
+#       # If there is only one cancer 
+#       cancer.fgsea.df <- metric.nes
+#      }
+#       
+#     }
+#       cancer.fgsea.df$project <- cancer.project
+#       return(cancer.fgsea.df)
+
+}
+```
