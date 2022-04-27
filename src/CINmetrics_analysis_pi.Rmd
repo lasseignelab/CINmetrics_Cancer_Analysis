@@ -30,7 +30,7 @@ library(readr)
 ## We create a vector with 33 cancer names to loop through
 cancer.project <- c("TCGA-KIRC", "TCGA-BRCA", "TCGA-SARC", "TCGA-MESO", "TCGA-READ", "TCGA-KIRP", "TCGA-PAAD", "TCGA-GBM", "TCGA-ACC", "TCGA-CESC", "TCGA-ESCA", "TCGA-DLBC", "TCGA-KICH", "TCGA-UVM", "TCGA-LAML", "TCGA-SKCM", "TCGA-PCPG", "TCGA-COAD", "TCGA-UCS", "TCGA-LUSC", "TCGA-LGG", "TCGA-HNSC", "TCGA-TGCT", "TCGA-THCA", "TCGA-LIHC", "TCGA-BLCA", "TCGA-UCEC", "TCGA-PRAD", "TCGA-OV", "TCGA-THYM", "TCGA-CHOL", "TCGA-STAD", "TCGA-LUAD")
 
-## The function takes cancer project name as defined in TCGAbiolinks package and returns maskCNV data ## merged with selected clinical variable data as well few extra variables (patient, tumor, project, ## type) 
+## The function takes cancer project names as defined in TCGAbiolinks package and obtains the gene expression data. 
 get_gex_data <- function(cancer.project){
   query.cancer <- GDCquery(project = cancer.project,
               data.category = "Transcriptome Profiling",
@@ -48,7 +48,6 @@ all.gex.list <- list(stingAsFactors = FALSE)
 for (i in 1:length(cancer.project)){
   all.gex.list <- append(all.gex.list, get_gex_data(cancer.project[i]))
 }
-
 all.gex.list[[1]] <- NULL
 names(all.gex.list) <- cancer.project
 
@@ -57,15 +56,15 @@ save(all.gex.list, file = here("data", "processed", "all.gex.list.RData"))
 ```
 
 ```{r}
-# We create a vector with the 19 cancers used in the Proliferative Index paper that the function will loop through
 
+# Here we load the all.gex.list which we created in the previous code chunk and the all.cinmetrics.df created in the CINmetrics_analysis.Rmd markdown
 load(all.gex.list)
 all.cinmetrics.df <- read.csv(here("data", "processed", "all_cinmetrics_df.csv"))
   
+# We create a vector with the 19 cancers used in the Proliferative Index paper that the function will loop through
 cancer.project <- c("TCGA-CESC", "TCGA-LUSC", "TCGA-BLCA", "TCGA-OV", "TCGA-ESCA", "TCGA-LAML", "TCGA-HNSC", "TCGA-STAD", "TCGA-SARC", "TCGA-GBM", "TCGA-BRCA", "TCGA-LUAD", "TCGA-MESO", "TCGA-ACC", "TCGA-PAAD", "TCGA-LIHC", "TCGA-KIRC", "TCGA-LGG", "TCGA-KIRP")
   
-# We will create a function that creates a dataframe with the tumor CINmetrics values and the matched tumor ProliferativeIndex values
-
+# This is a function that creates a dataframe with the tumor CINmetrics values and the matched tumor ProliferativeIndex values
 get_pi_df <- function(all.gex.list, cancer.project){
   # Creates a data frame to hold the proliferative indices for the 19 cancers
   all.pi.df <- data.frame("sample_id" = colnames(assays(all.gex.list[[1]])$`HTSeq - Counts`))
@@ -89,52 +88,52 @@ for (i in 1:length(cancer.project)) {
     proliferative.indices <- rownames_to_column(proliferative.indices, var = "sample_id")
     all.pi.df <- full_join(all.pi.df, proliferative.indices, by = c("sample_id"))
 }
-# Creates a dataframe with PI values, sample ID, and project 
+# Here we create a dataframe with PI values, sample ID, and project 
 all.pi.df <- all.pi.df %>% pivot_longer(!sample_id, names_to = "project", values_to = "pi") %>% drop_na()
 write.csv(all.pi.df, file = here("data", "processed", "all_pi_df.csv"), row.names = FALSE)
 
-# Creates a dataframe with CIN metrics and PI
+# Here match the sample names from the all.pi.df and all.cinmetrics.df based on sample ID
 all.pi.df$sample_vial <- substr(all.pi.df$sample_id, 1, nchar(all.pi.df$sample_id)-12) 
 all.pi.df <- all.pi.df %>% dplyr::select(sample_id, sample_vial, project, pi)
-
 all.cinmetrics.df$sample_vial <- substr(all.cinmetrics.df$sample_id, 1, nchar(all.cinmetrics.df$sample_id)-12)
 all.cinmetrics.df <- all.cinmetrics.df %>% dplyr::select(sample_id, sample_vial, patient_id, project, sample_type, tai, modified_tai, cna, base_segments, break_points, fga)
 all.cinmetrics.df$sample_vial <- gsub("-", ".", all.cinmetrics.df$sample_vial)
 
+# Here we create a dataframe with CIN metrics and PI
 all.cinmetrics.pi.df <- all.pi.df %>% dplyr::select(sample_vial, pi) %>% left_join(all.cinmetrics.df, ., by = "sample_vial") %>% drop_na()
 
+# Here we remove all normal samples
 tumor.cinmetrics.pi.df <- dplyr::filter(all.cinmetrics.pi.df, sample_type != "Solid Tissue Normal")
 
+# Creating a CSV to store our output
 write.csv(tumor.cinmetrics.pi.df, file = here("data", "processed", "tumor_cinmetrics_pi_df.csv"), row.names = FALSE)
 return(tumor.cinmetrics.pi.df)
 }
 
+# Creating a dataframe with CINmetrics and PI by sample ID
 tumor.cinmetrics.pi.df <- get_pi_df(all.gex.list, cancer.project)
 
 ```
 
 ```{r}
-# Loading in breast cancer subtypes 
+
+# Loading in breast cancer subtypes which was obtained elsewhere. I have obtained this from the Proliferative Indices paper analyses
 breast.subtypes <- read_csv("data/raw/breastsubtypes.csv")
 
-# We create a function that plots the Spearman's correlation between each CINmetric and the PI in the 19 cancers
+
+# This is a function that plots the Spearman's correlation between each CINmetric and the PI in BRCA and LAML for comparison. The different shapes show the different subtypes of the BRCA cancer
 get_cinmetrics_pi_corr <- function(tumor.cinmetrics.pi.df){
+  
 # Log10 transformation of CINmetrics values
 tumor.pi.df <- tumor.cinmetrics.pi.df %>% dplyr::select(sample_id, sample_vial, patient_id, project, sample_type, pi)
-  
-log.tumor.cinmetrics.df <- tumor.cinmetrics.pi.df %>% dplyr::select(tai, modified_tai, cna, base_segments, break_points, fga) %>% sapply(., log10) 
-
+  log.tumor.cinmetrics.df <- tumor.cinmetrics.pi.df %>% dplyr::select(tai, modified_tai, cna, base_segments, break_points, fga) %>% sapply(., log10) 
 log.tumor.cinmetrics.pi.df <- cbind(tumor.pi.df, log.tumor.cinmetrics.df)
 
 # Subset BRCA and LAML and include BRCA subtypes
-
 brca.laml.log.cinmetrics.pi.df <- log.tumor.cinmetrics.pi.df %>% dplyr::filter(., project == "TCGA-BRCA" | project == "TCGA-LAML")
-
 breast.subtypes <- subset(breast.subtypes, select = c("Complete TCGA ID", "PAM50 mRNA"))
-
 brca.laml.subtypes.cinmetrics.pi.df  <- full_join(brca.laml.log.cinmetrics.pi.df, breast.subtypes, by = c("patient_id" = "Complete TCGA ID")) %>%
   dplyr::rename("breast_subtype" = "PAM50 mRNA") %>% drop_na(project) 
-
 brca.laml.subtypes.cinmetrics.pi.df$breast_subtype <- replace(brca.laml.subtypes.cinmetrics.pi.df$breast_subtype, is.na(brca.laml.subtypes.cinmetrics.pi.df$breast_subtype), "Not Reported")
 
 
@@ -255,28 +254,23 @@ cinmetrics_pi_corr
 breast.subtypes <- read_csv("data/raw/breastsubtypes.csv")
 tumor.cinmetrics.pi.df <- read_csv("data/processed/tumor_cinmetrics_pi_df.csv")
 
-# We create a function that plots the Spearman's correlation between each CINmetric and the PI in the 19 cancers for BRCA PAM50 subtypes 
+# We create a function that plots the Spearman's correlation between each CINmetric and the PI in the 19 cancers specifically for BRCA PAM50 subtypes 
 get_subtypes_corr <- function(tumor.cinmetrics.pi.df){
+  
 # Log10 transformation of CINmetrics values
 tumor.df <- tumor.cinmetrics.pi.df %>% dplyr::select(sample_id, sample_vial, patient_id, project, sample_type)
-  
 log.tumor.cinmetrics.pi.df <- tumor.cinmetrics.pi.df %>% dplyr::select(tai, modified_tai, cna, base_segments, break_points, fga, pi) %>% sapply(., log10) 
-
 log.tumor.cinmetrics.pi.df <- cbind(tumor.df, log.tumor.cinmetrics.pi.df)
 
 # Subset BRCA with BRCA subtypes
-
 brca.log.cinmetrics.pi.df <- log.tumor.cinmetrics.pi.df %>% dplyr::filter(., project == "TCGA-BRCA")
-
 breast.subtypes <- subset(breast.subtypes, select = c("Complete TCGA ID", "PAM50 mRNA"))
-
 brca.subtypes.cinmetrics.pi.df  <- full_join(brca.log.cinmetrics.pi.df, breast.subtypes, by = c("patient_id" = "Complete TCGA ID")) %>%
   dplyr::rename("breast_subtype" = "PAM50 mRNA") %>% drop_na(project) 
-
 brca.subtypes.cinmetrics.pi.df$breast_subtype <- replace(brca.subtypes.cinmetrics.pi.df$breast_subtype, is.na(brca.subtypes.cinmetrics.pi.df$breast_subtype), "Not Reported")
 
 
-# FGA v pi Plot
+# FGA v PI Plot
 fga.spearmans.corr <- ggscatter(brca.subtypes.cinmetrics.pi.df, 
                                 x = "fga", 
                                 y = "pi", 
@@ -294,7 +288,7 @@ fga.spearmans.corr <- ggscatter(brca.subtypes.cinmetrics.pi.df,
            method = "spearman", size = 3, label.x.npc = "left") 
 
 
-
+# Break Points v PI Plot
 break.points.spearmans.corr <- ggscatter(brca.subtypes.cinmetrics.pi.df, 
                                 x = "break_points", 
                                 y = "pi", 
@@ -311,6 +305,7 @@ break.points.spearmans.corr <- ggscatter(brca.subtypes.cinmetrics.pi.df,
   stat_cor(aes(color = breast_subtype), 
            method = "spearman", size = 3, label.x.npc = "left") 
 
+# Base Segments v PI Plot
 base.segments.spearmans.corr <- ggscatter(brca.subtypes.cinmetrics.pi.df, 
                                 x = "base_segments", 
                                 y = "pi", 
@@ -327,7 +322,7 @@ base.segments.spearmans.corr <- ggscatter(brca.subtypes.cinmetrics.pi.df,
   stat_cor(aes(color = breast_subtype), 
            method = "spearman", size = 3, label.x.npc = "left") 
 
-
+# TAI v PI Plot
 tai.spearmans.corr <- ggscatter(brca.subtypes.cinmetrics.pi.df, 
                                 x = "tai", 
                                 y = "pi", 
@@ -344,7 +339,7 @@ tai.spearmans.corr <- ggscatter(brca.subtypes.cinmetrics.pi.df,
   stat_cor(aes(color = breast_subtype), 
            method = "spearman", size = 3, label.x.npc = "center") 
 
-
+# Modified TAI v PI Plot
 modified.tai.spearmans.corr <- ggscatter(brca.subtypes.cinmetrics.pi.df, 
                                 x = "modified_tai", 
                                 y = "pi", 
@@ -361,6 +356,7 @@ modified.tai.spearmans.corr <- ggscatter(brca.subtypes.cinmetrics.pi.df,
   stat_cor(aes(color = breast_subtype), 
            method = "spearman", size = 3, label.x.npc = "left") 
 
+# CNA v PI Plot
 cna.spearmans.corr <- ggscatter(brca.subtypes.cinmetrics.pi.df, 
                                 x = "cna", 
                                 y = "pi", 
@@ -377,7 +373,7 @@ cna.spearmans.corr <- ggscatter(brca.subtypes.cinmetrics.pi.df,
   stat_cor(aes(color = breast_subtype), 
            method = "spearman", size = 3, label.x.npc = "left") 
 
-# CINmetrics Plot
+# CINmetrics vs PI Plots
 cinmetrics.spearmans.corr <- ggarrange(base.segments.spearmans.corr, 
                                    break.points.spearmans.corr, 
                                    tai.spearmans.corr, 
