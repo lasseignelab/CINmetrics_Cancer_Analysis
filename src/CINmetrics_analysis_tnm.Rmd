@@ -11,35 +11,42 @@ This R Markdown will have the analysis to compare the CINmetrics to clinical var
 
 # CINmetrics with Clinical Variables
 ```{r}
+# These are the packages that are used throughout this R Markdown
 library(tidyverse)
 library(here)
 library(rstatix)
 library(devtools)
 library(ggpubr)
 library(dplyr)
+library(ggstatsplot)
 ```
 ## CINmetrics with Clinical Variables Dataframe
 ```{r}
-## Loading the data with all of the CINmetrics values
+## Here, we load the data with all of the CINmetrics data that was created in the CINmetrics_analysis.Rmd and and all of the CNV data that was created in tcga_data.Rmd
 all.cinmetrics.df <- read.csv(here("data", "processed", "all_cinmetrics_df.csv"))
+all.cancer.df <- read.csv(here("data", "processed", "all_cancer_df.csv"))
 
-## This function takes the dataframe with the CINmetrics values and the CNV data and creates a dataframe that will also have the clinical variables associated by Patient ID
+## This function takes the all.cinmetrics.df and the all.cancer.df and creates a dataframe that will also have the clinical variables (tumor stage, nodal invasion, and metastasis information) associated by Patient ID
 get_tnm <- function(all.cancer.df, all.cinmetrics.df){
-  # Joining clinical variables to the CINmetrics dataframe and filtering out the cancers without TNM data
+  # Joining clinical variables to the CINmetrics dataframe and filtering out the cancer projects without TNM data
   all.tnm.df <- inner_join(all.cinmetrics.df, all.cancer.df[,c(7,13:16)], by = c("sample_id" = "Sample")) %>% unique(.) %>% filter(!project %in% c("TCGA-GBM", "TCGA-LAML", "TCGA-OV", "TCGA-THYM", "TCGA-UCS", "TCGA-DLBC", "TCGA-PCPG", "TCGA-UCEC", "TCGA-SARC", "TCGA-PRAD", "TCGA-LGG")) 
   # We store the output as a csv
 write.csv(all.tnm.df, file = here("data", "processed", "all_tnm_df.csv"), row.names = FALSE)
   return(all.tnm.df)
 }
+
+# Obtaining a dataframe with all of the CINmetrics and TNM data for each sample across the 22 cancer types in TCGA
 all.tnm.df <- get_tnm(all.cancer.df, all.cinmetrics.df)
 ```
+
 ## U-tests for CINmetrics and TNM Stages
 ```{r}
 ## We create vectors with the 22 cancer names and 6 CINmetrics to loop through 
 cancer.project <- c("TCGA-KIRC", "TCGA-BRCA", "TCGA-MESO", "TCGA-READ", "TCGA-KIRP", "TCGA-PAAD", "TCGA-ACC", "TCGA-CESC", "TCGA-ESCA", "TCGA-KICH", "TCGA-UVM", "TCGA-SKCM", "TCGA-COAD", "TCGA-LUSC", "TCGA-HNSC", "TCGA-TGCT", "TCGA-THCA", "TCGA-LIHC", "TCGA-BLCA", "TCGA-CHOL", "TCGA-STAD", "TCGA-LUAD")
 metrics <- c("tai", "modified_tai", "cna","base_segments", "break_points", "fga")
+
 ## This function takes the all.tnm.df and performs a Mann-Whitney U-test on each of the stages depending on TNM for tumor samples
-get_utest_data <- function(all.tnm.df, cancer.project, tnm.category, metrics){
+get_utest_data <- function(all.tnm.df, cancer.project, tnm.category, metrics, file.name){
   if(tnm.category == "tumor.stage"){
     # We create an empty dataframe to store the U-test data
     tumor.stage.utest.df <- data.frame(.y. = character(),
@@ -77,7 +84,7 @@ get_utest_data <- function(all.tnm.df, cancer.project, tnm.category, metrics){
     tumor.stage.utest.df$group2 <- ifelse(tumor.stage.utest.df$group2 %in% "1", "T1", ifelse(tumor.stage.utest.df$group2 %in% "2", "T2", ifelse(tumor.stage.utest.df$group2 %in% "3", "T3", ifelse(tumor.stage.utest.df$group2 %in% "4", "T4", tumor.stage.utest.df$group2))))
     
     # We will store this output in a CSV file 
-    write.csv(tumor.stage.utest.df, file = here("data", "processed", "tumor_stage_utest_df.csv"), row.names = FALSE)
+    write.csv(tumor.stage.utest.df, file = here("data", "processed", file.name), row.names = FALSE)
     return(tumor.stage.utest.df)
     
   } 
@@ -152,7 +159,7 @@ get_utest_data <- function(all.tnm.df, cancer.project, tnm.category, metrics){
    metastasis.utest.df <- rbind(metastasis.utest.df, acc.metastasis.utest.df)
    
    # We will store this output in a CSV file 
-   write.csv(metastasis.utest.df, file = here("data", "processed", "metastasis_utest_df.csv"), row.names = FALSE)
+   write.csv(metastasis.utest.df, file = here("data", "processed", file.name), row.names = FALSE)
    return(metastasis.utest.df)
   }  
   if(tnm.category == "node"){
@@ -236,36 +243,39 @@ get_utest_data <- function(all.tnm.df, cancer.project, tnm.category, metrics){
    node.utest.df$group2 <- ifelse(node.utest.df$group2 %in% "2", "N1", ifelse(node.utest.df$group2 %in% "3", "N2", ifelse(node.utest.df$group2 %in% "4", "N3", node.utest.df$group1)))
    
    # We will store this output in a CSV file 
-   write.csv(node.utest.df, file = here("data", "processed", "node_utest_df.csv"), row.names = FALSE)
+   write.csv(node.utest.df, file = here("data", "processed", file.name), row.names = FALSE)
    return(node.utest.df)
   }
   else{
     stop("Incorrect input for tnm.category. Make sure you pick 'tumor.stage', 'metastasis', or 'node'")
   }
   }
-tumor.stage.utest.df <- get_utest_data(all.tnm.df, cancer.project, tnm.category = "tumor.stage", metrics)
-metastasis.utest.df <- get_utest_data(all.tnm.df, cancer.project, tnm.category = "metastasis", metrics)
-node.utest.df <- get_utest_data(all.tnm.df, cancer.project, tnm.category = "node", metrics)
+tumor.stage.utest.df <- get_utest_data(all.tnm.df, cancer.project, tnm.category = "tumor.stage", metrics, file.name = "tumor_stage_utest_df.csv")
+metastasis.utest.df <- get_utest_data(all.tnm.df, cancer.project, tnm.category = "metastasis", metrics, file.name = "metastasis_utest_df.csv")
+node.utest.df <- get_utest_data(all.tnm.df, cancer.project, tnm.category = "node", metrics, file.name = "node_utest_df.csv")
+
+
 ```
 
-
+## Wilcox Bar Graphs of CINmetrics Values by Tumor Stage
 ```{r}
-# Loading data for Wilcox bar graphs
+# ## Here, we load the data that was created in the previous code chunk for Wilcox bar graphs
 metastasis.utest.df <- read.csv(here("data", "processed", "metastasis_utest_df.csv"))
 node.utest.df <- read.csv(here("data", "processed", "node_utest_df.csv"))
 tumor.stage.utest.df <- read.csv(here("data", "processed", "tumor_stage_utest_df.csv"))
 
-# This function takes the dataframe with the p.adj and p.values from the U-test results and creates bar graphs to compare across cancers. Note that there will be a red line on the graph which is showing the Bonferroni correction of p = 0.05.
+# This function takes the dataframe with the p.values from the U-test results and creates bar graphs to compare across cancers. Note: There will be a red line on the graph which is showing the Bonferroni correction for the analysis
 get_utest_graphs <- function(tnm.category, cancer.project){
   if(tnm.category == "tumor.stage"){
     # Filter for T1 and T4 and -Log10 transformation of p values
     filtered.tumor.stage.utest <- filter(tumor.stage.utest.df, group1 == "T1" & group2 == "T4")
-    filtered.tumor.stage.df<- filtered.tumor.stage.utest %>% select(cin, project, group1, group2)
-    # Creating a function to input into sapply
+    filtered.tumor.stage.df <- filtered.tumor.stage.utest %>% select(cin, project, group1, group2)
+    # Creating a function to calculate the -log10 transformation of the p-values to input into sapply
     neglog10 <- function(x){
       neglog10 <- -log10(x)
       return(neglog10)
     }
+    
     log.tumor.stage.utest <- filtered.tumor.stage.utest %>% select(p) %>% sapply(., neglog10)
     log.tumor.stage.utest <- cbind(filtered.tumor.stage.df, log.tumor.stage.utest)
     log.tumor.stage.utest$project <- str_remove(log.tumor.stage.utest$project, "TCGA-")
@@ -285,7 +295,7 @@ get_utest_graphs <- function(tnm.category, cancer.project){
                                        font.x = c(10, "bold"),
                                        font.y = c(10, "bold"),
                                        font.xtickslab = c(10, "bold"),
-                                      font.ytickslab = c(4, "bold"),) + geom_hline(yintercept = 1.30103, linetype = "dashed", color = "red") 
+                                      font.ytickslab = c(4, "bold"),) + geom_hline(yintercept = -log10(0.05/(length(base.segments.utest$p))), linetype = "dashed", color = "red") 
     # Breakpoints Plot
     break.points.utest <- filter(log.tumor.stage.utest, cin == "break_points")
     break.points.barplot <- ggbarplot(break.points.utest,
@@ -301,7 +311,7 @@ get_utest_graphs <- function(tnm.category, cancer.project){
                                        font.x = c(10, "bold"),
                                        font.y = c(10, "bold"),
                                        font.xtickslab = c(10, "bold"),
-                                      font.ytickslab = c(4, "bold"),) + geom_hline(yintercept = 1.30103, linetype = "dashed", color = "red")
+                                      font.ytickslab = c(4, "bold"),) + geom_hline(yintercept = -log10(0.05/(length(break.points.utest$p))), linetype = "dashed", color = "red")
     # TAI bar plot
     tai.utest <- filter(log.tumor.stage.utest, cin == "tai")
     tai.barplot <- ggbarplot(tai.utest,
@@ -317,7 +327,7 @@ get_utest_graphs <- function(tnm.category, cancer.project){
                                        font.x = c(10, "bold"),
                                        font.y = c(10, "bold"),
                                        font.xtickslab = c(10, "bold"),
-                                      font.ytickslab = c(4, "bold"),) + geom_hline(yintercept = 1.30103, linetype = "dashed", color = "red")
+                                      font.ytickslab = c(4, "bold"),) + geom_hline(yintercept = -log10(0.05/(length(tai.utest$p))), linetype = "dashed", color = "red")
     # FGA bar plot
     fga.utest <- filter(log.tumor.stage.utest, cin == "fga")
     fga.barplot <- ggbarplot(fga.utest,
@@ -333,7 +343,7 @@ get_utest_graphs <- function(tnm.category, cancer.project){
                                        font.x = c(10, "bold"),
                                        font.y = c(10, "bold"),
                                        font.xtickslab = c(10, "bold"),
-                                      font.ytickslab = c(4, "bold"),) + geom_hline(yintercept = 1.30103, linetype = "dashed", color = "red")
+                                      font.ytickslab = c(4, "bold"),) + geom_hline(yintercept = -log10(0.05/(length(fga.utest$p))), linetype = "dashed", color = "red")
     # CNA bar plot
     cna.utest <- filter(log.tumor.stage.utest, cin == "cna")
     cna.barplot <- ggbarplot(cna.utest,
@@ -349,7 +359,7 @@ get_utest_graphs <- function(tnm.category, cancer.project){
                                        font.x = c(10, "bold"),
                                        font.y = c(10, "bold"),
                                        font.xtickslab = c(10, "bold"),
-                                      font.ytickslab = c(4, "bold"),) + geom_hline(yintercept = 1.30103, linetype = "dashed", color = "red")
+                                      font.ytickslab = c(4, "bold"),) + geom_hline(yintercept = -log10(0.05/(length(cna.utest$p))), linetype = "dashed", color = "red")
    
      # Modified TAI bar plot
     modified.tai.utest <- filter(log.tumor.stage.utest, cin == "modified_tai")
@@ -366,9 +376,9 @@ get_utest_graphs <- function(tnm.category, cancer.project){
                                        font.x = c(10, "bold"),
                                        font.y = c(10, "bold"),
                                        font.xtickslab = c(10, "bold"),
-                                      font.ytickslab = c(4, "bold"),) + geom_hline(yintercept = 1.30103, linetype = "dashed", color = "red")
+                                      font.ytickslab = c(4, "bold"),) + geom_hline(yintercept = -log10(0.05/(length(modified.tai.utest$p))), linetype = "dashed", color = "red")
     
-    # Tumor Stage Bar Plot
+    # Combining Separate CINmetrics Plots into one Tumor Stage Bar Plot
     tumor.stage.barplot <- ggarrange(base.segments.barplot + rremove("xlab"),
                                      fga.barplot + rremove("xlab"),
                                      break.points.barplot + rremove("xlab"),
@@ -385,7 +395,7 @@ get_utest_graphs <- function(tnm.category, cancer.project){
     # Filter for T1 and T4 and -Log10 transformation of p values
     filtered.metastasis.utest <- filter(metastasis.utest.df, group1 == "M0" & group2 == "M1")
     filtered.metastasis.df<- filtered.metastasis.utest %>% select(cin, project, group1, group2)
-    # Creating a function to input into sapply
+    # Creating a function to calculate the -log10 transformation of the p-values to input into sapply
     neglog10 <- function(x){
       neglog10 <- -log10(x)
       return(neglog10)
@@ -409,7 +419,7 @@ get_utest_graphs <- function(tnm.category, cancer.project){
                                        font.x = c(10, "bold"),
                                        font.y = c(10, "bold"),
                                        font.xtickslab = c(10, "bold"),
-                                      font.ytickslab = c(4, "bold"),) + geom_hline(yintercept = 1.30103, linetype = "dashed", color = "red") + theme(plot.title = element_text(hjust = 0.5))
+                                      font.ytickslab = c(4, "bold"),) + geom_hline(yintercept = -log10(0.05/(length(base.segments.utest$p))), linetype = "dashed", color = "red") + theme(plot.title = element_text(hjust = 0.5))
     # Breakpoints Plot
     break.points.utest <- filter(log.metastasis.utest, cin == "break_points")
     break.points.barplot <- ggbarplot(break.points.utest,
@@ -425,7 +435,7 @@ get_utest_graphs <- function(tnm.category, cancer.project){
                                        font.x = c(10, "bold"),
                                        font.y = c(10, "bold"),
                                        font.xtickslab = c(10, "bold"),
-                                      font.ytickslab = c(4, "bold"),) + geom_hline(yintercept = 1.30103, linetype = "dashed", color = "red") + theme(plot.title = element_text(hjust = 0.5))
+                                      font.ytickslab = c(4, "bold"),) + geom_hline(yintercept = -log10(0.05/(length(break.points.utest$p))), linetype = "dashed", color = "red") + theme(plot.title = element_text(hjust = 0.5))
     # TAI bar plot
     tai.utest <- filter(log.metastasis.utest, cin == "tai")
     tai.barplot <- ggbarplot(tai.utest,
@@ -441,7 +451,7 @@ get_utest_graphs <- function(tnm.category, cancer.project){
                                        font.x = c(10, "bold"),
                                        font.y = c(10, "bold"),
                                        font.xtickslab = c(10, "bold"),
-                                      font.ytickslab = c(4, "bold"),) + geom_hline(yintercept = 1.30103, linetype = "dashed", color = "red") + theme(plot.title = element_text(hjust = 0.5))
+                                      font.ytickslab = c(4, "bold"),) + geom_hline(yintercept = -log10(0.05/(length(tai.utest$p))), linetype = "dashed", color = "red") + theme(plot.title = element_text(hjust = 0.5))
     # FGA bar plot
     fga.utest <- filter(log.metastasis.utest, cin == "fga")
     fga.barplot <- ggbarplot(fga.utest,
@@ -457,7 +467,7 @@ get_utest_graphs <- function(tnm.category, cancer.project){
                                        font.x = c(10, "bold"),
                                        font.y = c(10, "bold"),
                                        font.xtickslab = c(10, "bold"),
-                                      font.ytickslab = c(4, "bold"),) + geom_hline(yintercept = 1.30103, linetype = "dashed", color = "red") + theme(plot.title = element_text(hjust = 0.5))
+                                      font.ytickslab = c(4, "bold"),) + geom_hline(yintercept = -log10(0.05/(length(fga.utest$p))), linetype = "dashed", color = "red") + theme(plot.title = element_text(hjust = 0.5))
     # CNA bar plot
     cna.utest <- filter(log.metastasis.utest, cin == "cna")
     cna.barplot <- ggbarplot(cna.utest,
@@ -473,7 +483,7 @@ get_utest_graphs <- function(tnm.category, cancer.project){
                                        font.x = c(10, "bold"),
                                        font.y = c(10, "bold"),
                                        font.xtickslab = c(10, "bold"),
-                                      font.ytickslab = c(4, "bold"),) + geom_hline(yintercept = 1.30103, linetype = "dashed", color = "red") + theme(plot.title = element_text(hjust = 0.5))
+                                      font.ytickslab = c(4, "bold"),) + geom_hline(yintercept = -log10(0.05/(length(cna.utest$p))), linetype = "dashed", color = "red") + theme(plot.title = element_text(hjust = 0.5))
    
      # Modified TAI bar plot
     modified.tai.utest <- filter(log.metastasis.utest, cin == "modified_tai")
@@ -490,9 +500,9 @@ get_utest_graphs <- function(tnm.category, cancer.project){
                                        font.x = c(10, "bold"),
                                        font.y = c(10, "bold"),
                                        font.xtickslab = c(10, "bold"),
-                                      font.ytickslab = c(4, "bold"),) + geom_hline(yintercept = 1.30103, linetype = "dashed", color = "red") + theme(plot.title = element_text(hjust = 0.5))
+                                      font.ytickslab = c(4, "bold"),) + geom_hline(yintercept = -log10(0.05/(length(modified.tai.utest$p))), linetype = "dashed", color = "red") + theme(plot.title = element_text(hjust = 0.5))
     
-    # Tumor Stage Bar Plot
+    # Combining Separate CINmetrics Plots into one Metastasis Bar Plot
     metastasis.barplot <- ggarrange(base.segments.barplot + rremove("xlab"),
                                     fga.barplot + rremove("xlab"),
                                     break.points.barplot + rremove("xlab"),
@@ -507,7 +517,7 @@ get_utest_graphs <- function(tnm.category, cancer.project){
   if(tnm.category == "node"){
     filtered.node.utest <- dplyr::filter(node.utest.df, group1 == "N0" & group2 == "N1")
     filtered.node.df <- filtered.node.utest %>% select(cin, project, group1, group2)
-    # Creating a function to input into sapply
+    # Creating a function to calculate the -log10 transformation of the p-values to input into sapply
     neglog10 <- function(x){
       neglog10 <- -log10(x)
       return(neglog10)
@@ -531,7 +541,7 @@ get_utest_graphs <- function(tnm.category, cancer.project){
                                        font.x = c(10, "bold"),
                                        font.y = c(10, "bold"),
                                        font.xtickslab = c(10, "bold"),
-                                      font.ytickslab = c(4, "bold"),) + geom_hline(yintercept = 1.30103, linetype = "dashed", color = "red")
+                                      font.ytickslab = c(4, "bold"),) + geom_hline(yintercept = -log10(0.05/(length(base.segments.utest$p))), linetype = "dashed", color = "red")
     # Breakpoints Plot
     break.points.utest <- filter(log.node.utest, cin == "break_points")
     break.points.barplot <- ggbarplot(break.points.utest,
@@ -547,7 +557,7 @@ get_utest_graphs <- function(tnm.category, cancer.project){
                                        font.x = c(10, "bold"),
                                        font.y = c(10, "bold"),
                                        font.xtickslab = c(10, "bold"),
-                                      font.ytickslab = c(4, "bold"),) + geom_hline(yintercept = 1.30103, linetype = "dashed", color = "red")
+                                      font.ytickslab = c(4, "bold"),) + geom_hline(yintercept = -log10(0.05/(length(break.points.utest$p))), linetype = "dashed", color = "red")
     # TAI bar plot
     tai.utest <- filter(log.node.utest, cin == "tai")
     tai.barplot <- ggbarplot(tai.utest,
@@ -563,7 +573,7 @@ get_utest_graphs <- function(tnm.category, cancer.project){
                                        font.x = c(10, "bold"),
                                        font.y = c(10, "bold"),
                                        font.xtickslab = c(10, "bold"),
-                                      font.ytickslab = c(4, "bold"),) + geom_hline(yintercept = 1.30103, linetype = "dashed", color = "red")
+                                      font.ytickslab = c(4, "bold"),) + geom_hline(yintercept = -log10(0.05/(length(tai.utest$p))), linetype = "dashed", color = "red")
     # FGA bar plot
     fga.utest <- filter(log.node.utest, cin == "fga")
     fga.barplot <- ggbarplot(fga.utest,
@@ -579,7 +589,7 @@ get_utest_graphs <- function(tnm.category, cancer.project){
                                        font.x = c(10, "bold"),
                                        font.y = c(10, "bold"),
                                        font.xtickslab = c(10, "bold"),
-                                      font.ytickslab = c(4, "bold"),) + geom_hline(yintercept = 1.30103, linetype = "dashed", color = "red")
+                                      font.ytickslab = c(4, "bold"),) + geom_hline(yintercept = -log10(0.05/(length(fga.utest$p))), linetype = "dashed", color = "red")
     # CNA bar plot
     cna.utest <- filter(log.node.utest, cin == "cna")
     cna.barplot <- ggbarplot(cna.utest,
@@ -595,7 +605,7 @@ get_utest_graphs <- function(tnm.category, cancer.project){
                                        font.x = c(10, "bold"),
                                        font.y = c(10, "bold"),
                                        font.xtickslab = c(10, "bold"),
-                                      font.ytickslab = c(4, "bold"),) + geom_hline(yintercept = 1.30103, linetype = "dashed", color = "red")
+                                      font.ytickslab = c(4, "bold"),) + geom_hline(yintercept = -log10(0.05/(length(cna.utest$p))), linetype = "dashed", color = "red")
    
      # Modified TAI bar plot
     modified.tai.utest <- filter(log.node.utest, cin == "modified_tai")
@@ -612,9 +622,9 @@ get_utest_graphs <- function(tnm.category, cancer.project){
                                        font.x = c(10, "bold"),
                                        font.y = c(10, "bold"),
                                        font.xtickslab = c(10, "bold"),
-                                      font.ytickslab = c(4, "bold"),) + geom_hline(yintercept = 1.30103, linetype = "dashed", color = "red")
+                                      font.ytickslab = c(4, "bold"),) + geom_hline(yintercept = -log10(0.05/(length(modified.tai.utest$p))), linetype = "dashed", color = "red")
     
-    # Tumor Stage Bar Plot
+    # Combining Separate CINmetrics Plots into one Node Bar Plot
     node.barplot <- ggarrange(base.segments.barplot + rremove("xlab"),
                               fga.barplot + rremove("xlab"),
                               break.points.barplot + rremove("xlab"),
@@ -627,6 +637,8 @@ get_utest_graphs <- function(tnm.category, cancer.project){
     return(node.barplot)
 }
 }
+
+# Creating one figure with all of the clinical variables
 tumor.stage.barplot <- get_utest_graphs(tnm.category = "tumor.stage")
 metastasis.barplot <-  get_utest_graphs(tnm.category = "metastasis")
 node.barplot <-  get_utest_graphs(tnm.category = "node")
@@ -638,3 +650,184 @@ tnm.barplot <- ggarrange(tumor.stage.barplot,
 
 tnm.barplot
 ```
+
+
+```{r}
+# This function takes CINmetrics values and does a log10 transformation from the all.tnm.df and creates a strip chart categorized by tumor stage. 
+
+#NOTE: I am still getting an error on this, so this particular code is not functional yet. There is hard code in the R chunk below of the figure I created. I am having trouble at the '# Calculating u-test data for specific cancer and metric to prepare for violin plot' part of this particular chunk. This is the error: Error in `[.data.frame`(tumor.stage.df, , j) : undefined columns selected. This error is occurring because the get_utest_data is unable to recognize the log10 column created within this function.
+
+get_tumorstage_violinplot <- function(all.tnm.df, cancer.project, metric){
+  # Subsetting by specific cancer
+  cancer.tumor.stage.df <- filter(all.tnm.df, project == cancer.project) %>% filter(!(ajcc_pathologic_t %in% c("TX", "Tis", "T0")) & sample_type %in% c("Metastatic", "Primary Blood Derived Cancer", "Primary Tumor", "Recurrent Tumor", "Additional - New Primary", "Primary Blood Derived Cancer - Peripheral Blood")) %>% drop_na(ajcc_pathologic_t)
+  
+  # log10 transformation of CINmetric of your choice
+  cancer.tumor.stage.df$log10metric <- cancer.tumor.stage.df %>% dplyr::select(metric) %>% log10()
+
+  # Filtering subtumor stages to be under main tumor stage
+  cancer.tumor.stage.df$ajcc_pathologic_t <- ifelse(cancer.tumor.stage.df$ajcc_pathologic_t %in% c("T1a", "T1a1", "T1b", "T1b2", "T1b1", "T1c"), "T1", ifelse(cancer.tumor.stage.df$ajcc_pathologic_t %in% c("T2a", "T2b", "T2c", "T2a2", "T2a1", "T2a2"), "T2", ifelse(cancer.tumor.stage.df$ajcc_pathologic_t %in% c("T3a", "T3b", "T3c"), "T3", ifelse(cancer.tumor.stage.df$ajcc_pathologic_t %in% c("T4a", "T4b", "T4c", "T4d", "T4e"), "T4", cancer.tumor.stage.df$ajcc_pathologic_t))))
+  
+  # Calculating u-test data for specific cancer and metric to prepare for violin plot
+  cancer.tumor.stage.utest.df <- get_utest_data(cancer.tumor.stage.df, cancer.project = cancer.project, tnm.category = "tumor.stage", metrics = paste("log10metric", metric, sep = "."), file.name = paste(cancer.project, paste(metric, "tumor_stage_utest_df.csv", sep = "_"), sep = "_"))
+  cancer.tumor.stage.df$ajcc_pathologic_t <- factor(filtered.brca.tumor.stage.df$ajcc_pathologic_t, levels = c("T1", "T2", "T3", "T4"))
+  cancer.metric.utest.df <- cancer.tumor.stage.utest.df %>% dplyr::select(group1, group2, p) 
+  
+  # Adding asterisks to u-test results for figure 
+cancer.metric.utest.df$p.signif <- ifelse(cancer.metric.utest.df$p <= 0.0001, paste(cancer.metric.utest.df$p,"****", sep = ""), ifelse(cancer.metric.utest.df$p <= 0.001, paste(cancer.metric.utest.df$p, "***", sep = ""), ifelse(cancer.metric.utest.df$p <= 0.01, paste(cancer.metric.utest.df$p, "**", sep = ""), ifelse(cancer.metric.utest.df$p <= 0.05, paste(cancer.metric.utest.df$p, "*",sep = ""), paste(cancer.metric.utest.df$p,"(Not Significant)", sep = " ")))))
+
+  # Creating Violin Plot based on Tumor Stages 
+  cancer.metric.violinplot <- ggviolin(cancer.metric.utest.df,
+                                      x = "ajcc_pathologic_t", 
+                                      y = paste("log10", metric, sep = ""),
+                                      fill = "ajcc_pathologic_t", 
+                                      color = "ajcc_pathologic_t", 
+                                      palette = "simpsons", 
+                                      size = .5, 
+                                      xlab = cancer.project, 
+                                      ylab = paste("log10", metric, sep = ""),
+                                      alpha = .3, 
+                                      title = paste(metric, "by tumor stage", sep = ""),
+                                      font.main = c(11, "bold"),
+                                      font.x = c(10, "bold"),
+                                      font.y = c(10, "bold"),
+                                      font.xtickslab = c(10, "bold"),
+                                      font.ytickslab = c(7, "bold"),
+                                      add = c("boxplot", "jitter"), add.params = list(size = .3, alpha = .5, fill = "white"),
+                                      ) + stat_pvalue_manual(read.tumor.stage.break.points.utest.df,
+                                                             y.position = 10,
+                                                             step.increase = 0.1,
+                                                             label = "p.signif")
+  return(cancer.metric.violinplot)
+}
+
+ # Testing the function to create violin plot in breast cancer for base segments metric
+brca.base.segments.violin.plot <- get_tumorstage_violinplot(all.tnm.df, cancer.project = "TCGA-BRCA", metric = "base_segments")
+
+```
+
+
+
+```{r}
+# Takes the dataframe with the p.values from the U-test results and creates a violin plot to show the different CINmetric values based on tumor stage with significance shown. NOTE: This is the hard code I created and what I used to create the function above. 
+
+## Comparing the p-values between each tumor stage in BRCA Base Segments and READ Break Points
+# Creating figure for BRCA Base Segments
+
+# Filtering all.tnm.df to only have breast cancer and remove samples that do not have the tumor stage data we are using
+brca.tumor.stage.df <- filter(all.tnm.df, project == "TCGA-BRCA") %>% filter(!(ajcc_pathologic_t %in% c("TX", "Tis", "T0")) & sample_type %in% c("Metastatic", "Primary Blood Derived Cancer", "Primary Tumor", "Recurrent Tumor", "Additional - New Primary", "Primary Blood Derived Cancer - Peripheral Blood")) %>% drop_na(ajcc_pathologic_t)
+
+# Log10 transformation of Base Segments Values for graphing purposes
+brca.tumor.stage.df$log10base_segments <- log10(brca.tumor.stage.df$base_segments)
+
+# Filtering to have only values more that 8 (per Vishal's request) and to categorize tumor stages by main stages
+filtered.brca.tumor.stage.df <- dplyr::filter(brca.tumor.stage.df, log10base_segments >= 8)
+filtered.brca.tumor.stage.df $ajcc_pathologic_t <- ifelse(filtered.brca.tumor.stage.df$ajcc_pathologic_t %in% c("T1a", "T1a1", "T1b", "T1b2", "T1b1", "T1c"), "T1", ifelse(filtered.brca.tumor.stage.df$ajcc_pathologic_t %in% c("T2a", "T2b", "T2c", "T2a2", "T2a1", "T2a2"), "T2", ifelse(filtered.brca.tumor.stage.df$ajcc_pathologic_t %in% c("T3a", "T3b", "T3c"), "T3", ifelse(filtered.brca.tumor.stage.df$ajcc_pathologic_t %in% c("T4a", "T4b", "T4c", "T4d", "T4e"), "T4", filtered.brca.tumor.stage.df$ajcc_pathologic_t))))
+
+# Obtaining u-test p-values based on transformation and filtering for Violin Plot 
+metrics <- c("tai", "modified_tai", "cna","base_segments", "break_points", "fga", "log10base_segments")
+brca.tumor.stage.utest.df <- get_utest_data(filtered.brca.tumor.stage.df, cancer.project = "TCGA-BRCA", tnm.category = "tumor.stage", metrics)
+filtered.brca.tumor.stage.df$ajcc_pathologic_t <- factor(filtered.brca.tumor.stage.df$ajcc_pathologic_t, levels = c("T1", "T2", "T3", "T4"))
+brca.tumor.stage.base.segments.utest.df <- dplyr::filter(brca.tumor.stage.utest.df , (project == "TCGA-BRCA" & cin == "log10base_segments")) %>% select(group1, group2, p) 
+
+# Creating a column in utest df for the asterisks based on p-value significance for Violin Plot figure 
+brca.tumor.stage.base.segments.utest.df$p.signif <- ifelse(brca.tumor.stage.base.segments.utest.df$p <= 0.0001, paste(brca.tumor.stage.base.segments.utest.df$p,"****", sep = ""), ifelse(brca.tumor.stage.base.segments.utest.df$p <= 0.001, paste(brca.tumor.stage.base.segments.utest.df$p, "***", sep = ""), ifelse(brca.tumor.stage.base.segments.utest.df$p <= 0.01, paste(brca.tumor.stage.base.segments.utest.df$p, "**", sep = ""), ifelse(brca.tumor.stage.base.segments.utest.df$p <= 0.05, paste(brca.tumor.stage.base.segments.utest.df$p, "*",sep = ""), paste(brca.tumor.stage.base.segments.utest.df$p,"(Not Significant)", sep = " ")))))
+
+# Creating Violin Plot
+brca.base.segments.violin.plot <- ggviolin(filtered.brca.tumor.stage.df,
+                                      x = "ajcc_pathologic_t", 
+                                      y = "log10base_segments", 
+                                      fill = "ajcc_pathologic_t", 
+                                      color = "ajcc_pathologic_t", 
+                                      palette = "simpsons", 
+                                      size = .5, 
+                                      xlab = "TCGA-BRCA", 
+                                      ylab = "log10(Base Segments)",
+                                      
+
+
+                                      #yscale = "log10",
+                                      #format.scale = TRUE,
+                                      #position = position_jitterdodge(jitter.width = .7, jitter.height = .5, dodge.width = 0), 
+                                      #rotate = FALSE,
+                                      alpha = .3, 
+                                      #p.adjust.method = "none",
+                                      #combine = TRUE,
+                                      title = "Base Segments Categorized by Tumor Stage (Filtered >8 log10(base_segments)",
+                                      font.main = c(11, "bold"),
+                                      font.x = c(10, "bold"),
+                                      font.y = c(10, "bold"),
+                                      font.xtickslab = c(10, "bold"),
+                                      font.ytickslab = c(7, "bold"),
+                                      #legend.title = "Tumor Stage",
+                                      #font.legend = c(10, "bold"), 
+                                      add = c("boxplot", "jitter"), add.params = list(size = .3, alpha = .5, fill = "white"),
+                                      #add = "mean_sd", add.params = list(size = .5, alpha = 1, group = "ajcc_pathologic_t", color = "black")
+                                      ) + stat_pvalue_manual(brca.tumor.stage.base.segments.utest.df,
+                                                             y.position = 10,
+                                                             step.increase = 0.1,
+                                                             label = "p.signif")
+brca.base.segments.violin.plot
+
+# Repeating Violin Plot hard code for READ in break points 
+
+# Filtering all.tnm.df to only have breast cancer and remove samples that do not have the tumor stage data we are using
+filtered.read.tumor.stage.df <- filter(all.tnm.df, project == "TCGA-READ") %>% filter(!(ajcc_pathologic_t %in% c("TX", "Tis", "T0")) & sample_type %in% c("Metastatic", "Primary Blood Derived Cancer", "Primary Tumor", "Recurrent Tumor", "Additional - New Primary", "Primary Blood Derived Cancer - Peripheral Blood")) %>% drop_na(ajcc_pathologic_t)
+
+# Log10 transformation of Break Points Values for graphing purposes
+filtered.read.tumor.stage.df$log10break_points <- log10(filtered.read.tumor.stage.df$break_points)
+
+# Categorizing tumor stages by main stages
+filtered.read.tumor.stage.df $ajcc_pathologic_t <- ifelse(filtered.read.tumor.stage.df $ajcc_pathologic_t %in% c("T1a", "T1a1", "T1b", "T1b2", "T1b1", "T1c"), "T1", ifelse(filtered.read.tumor.stage.df $ajcc_pathologic_t %in% c("T2a", "T2b", "T2c", "T2a2", "T2a1", "T2a2"), "T2", ifelse(filtered.read.tumor.stage.df $ajcc_pathologic_t %in% c("T3a", "T3b", "T3c"), "T3", ifelse(filtered.read.tumor.stage.df $ajcc_pathologic_t %in% c("T4a", "T4b", "T4c", "T4d", "T4e"), "T4", filtered.read.tumor.stage.df$ajcc_pathologic_t))))
+
+
+# Obtaining u-test p-values based on transformation and filtering for Violin Plot 
+metrics <- c("tai", "modified_tai", "cna","base_segments", "break_points", "fga", "log10break_points")
+read.tumor.stage.utest.df <- get_utest_data(filtered.read.tumor.stage.df, cancer.project = "TCGA-READ", tnm.category = "tumor.stage", metrics)
+filtered.read.tumor.stage.df$ajcc_pathologic_t <- factor(filtered.read.tumor.stage.df$ajcc_pathologic_t, levels = c("T1", "T2", "T3", "T4"))
+read.tumor.stage.break.points.utest.df <- dplyr::filter(read.tumor.stage.utest.df , (project == "TCGA-READ" & cin == "log10break_points")) %>% select(group1, group2, p) 
+
+# Creating a column in utest df for the asterisks based on p-value significance for Violin Plot figure 
+read.tumor.stage.break.points.utest.df$p.signif <- ifelse(read.tumor.stage.break.points.utest.df$p <= 0.0001, paste(read.tumor.stage.break.points.utest.df$p,"****", sep = ""), ifelse(read.tumor.stage.break.points.utest.df$p <= 0.001, paste(read.tumor.stage.break.points.utest.df$p, "***", sep = ""), ifelse(read.tumor.stage.break.points.utest.df$p <= 0.01, paste(read.tumor.stage.break.points.utest.df$p, "**", sep = ""), ifelse(read.tumor.stage.break.points.utest.df$p <= 0.05, paste(read.tumor.stage.break.points.utest.df$p, "*",sep = ""), paste(read.tumor.stage.break.points.utest.df$p,"(Not Significant)", sep = " ")))))
+
+# Creating Violin Plot
+read.break.points.violin.plot <- ggviolin(filtered.read.tumor.stage.df,
+                                      x = "ajcc_pathologic_t", 
+                                      y = "log10break_points", 
+                                      fill = "ajcc_pathologic_t", 
+                                      color = "ajcc_pathologic_t", 
+                                      palette = "simpsons", 
+                                      size = .5, 
+                                      xlab = "TCGA-READ", 
+                                      ylab = "log10(Break Points)",
+                                      
+
+
+                                      #yscale = "log10",
+                                      #format.scale = TRUE,
+                                      #position = position_jitterdodge(jitter.width = .7, jitter.height = .5, dodge.width = 0), 
+                                      #rotate = FALSE,
+                                      alpha = .3, 
+                                      #p.adjust.method = "none",
+                                      #combine = TRUE,
+                                      title = "Break Points Categorized by Tumor Stage",
+                                      font.main = c(11, "bold"),
+                                      font.x = c(10, "bold"),
+                                      font.y = c(10, "bold"),
+                                      font.xtickslab = c(10, "bold"),
+                                      font.ytickslab = c(7, "bold"),
+                                      #legend.title = "Tumor Stage",
+                                      #font.legend = c(10, "bold"), 
+                                      add = c("boxplot", "jitter"), add.params = list(size = .3, alpha = .5, fill = "white"),
+                                      #add = "mean_sd", add.params = list(size = .5, alpha = 1, group = "ajcc_pathologic_t", color = "black")
+                                      ) + stat_pvalue_manual(read.tumor.stage.break.points.utest.df,
+                                                             y.position = 10,
+                                                             step.increase = 0.1,
+                                                             label = "p.signif")
+read.break.points.violin.plot
+
+
+
+
+
+```
+
