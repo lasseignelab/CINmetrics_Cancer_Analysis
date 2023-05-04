@@ -176,11 +176,11 @@ loaded via a namespace (and not attached):
 ```{r}
 # styler
 style_file(here("src",
-                "220302_CINmetrics_analysis_SexBias.Rmd"))
+                "CINmetrics_analysis_sex.Rmd"))
 
 # lintr
 lint(filename = here("src",
-                     "220302_CINmetrics_analysis_SexBias.Rmd"))
+                     "CINmetrics_analysis_sex.Rmd"))
 ```
 
 
