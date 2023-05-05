@@ -56,3 +56,17 @@ write.csv(all.cancer.df, file = here("data", "processed", "all_cancer_df.csv"), 
 ```
 
 
+```{r}
+sessionInfo() # see output below
+```
+
+```{r}
+# styler
+style_file(here("src",
+                "tcga_data.Rmd"))
+
+# lintr
+lint(filename = here("src",
+                     "tcga_data.Rmd"))
+```
+
