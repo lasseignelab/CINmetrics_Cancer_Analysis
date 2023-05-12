@@ -1,15 +1,72 @@
 ---
-title: "TCGA_data"
+title: "Obtaining TCGA Data"
 author: "Vishal Oza"
-date: "8/20/2021"
+date: "8/23/2021"
 output: html_document
 ---
 
+# Downloading TCGA Data 
+----------------------------------------------------------------------------------------
+
 ```{r}
+library(TCGAbiolinks)
+library(SummarizedExperiment)
+library(dplyr)
+library(tidyr)
+library(stringr)
 library(here)
 ```
 
+
+## maskCNV data
 ```{r}
 
+## We create a vector with 33 cancer names to loop through
+cancer.project <- c("TCGA-KIRC", "TCGA-BRCA", "TCGA-SARC", "TCGA-MESO", "TCGA-READ", "TCGA-KIRP", "TCGA-PAAD", "TCGA-GBM", "TCGA-ACC", "TCGA-CESC", "TCGA-ESCA", "TCGA-DLBC", "TCGA-KICH", "TCGA-UVM", "TCGA-LAML", "TCGA-SKCM", "TCGA-PCPG", "TCGA-COAD", "TCGA-UCS", "TCGA-LUSC", "TCGA-LGG", "TCGA-HNSC", "TCGA-TGCT", "TCGA-THCA", "TCGA-LIHC", "TCGA-BLCA", "TCGA-UCEC", "TCGA-PRAD", "TCGA-OV", "TCGA-THYM", "TCGA-CHOL", "TCGA-STAD", "TCGA-LUAD")
+
+## The function takes cancer project name as defined in TCGAbiolinks package and returns maskCNV data ## merged with selected clinical variable data as well few extra variables (patient, tumor, project, ## type) 
+get_cnv_data <- function(cancer.project){
+  query.cancer <- GDCquery(project = cancer.project,
+              data.category = "Copy Number Variation",
+             data.type = "Masked Copy Number Segment", legacy=FALSE)
+  query.result <- query.cancer$results[[1]] %>% select(cases, project, sample_type)
+  GDCdownload(query = query.cancer)
+  maskCNV.cancer <- GDCprepare(query = query.cancer, summarizedExperiment = TRUE)
+  maskCNV.cancer <- inner_join(maskCNV.cancer, query.result, by = c("Sample" = "cases"), copy = TRUE)
+  maskCNV.cancer <- maskCNV.cancer %>% separate(Sample, c("patient", "type"), 12, remove = FALSE) %>%                     separate(type, c("tumour"), -13)
+  maskCNV.cancer$tumour <- as.numeric(str_remove(maskCNV.cancer$tumour, "-"))
+  maskCNV.cancer <- maskCNV.cancer %>% mutate(type = case_when(tumour == 1 | tumour == 6 ~ "tumor",
+                    tumour == 10 | tumour == 11 ~ "normal"))
+  query.clinic <- GDCquery_clinic(project = cancer.project) %>% select(any_of(c("submitter_id", 
+                  "ajcc_pathologic_t", "ajcc_pathologic_m", "ajcc_pathologic_n", "ajcc_clinical_m", 
+                  "age_at_diagnosis", "gender", "ajcc_pathologic_stage")))
+  query.map <- inner_join(maskCNV.cancer, query.clinic, by = c("patient" = "submitter_id"))
+  return(query.map)
+}
+
+## We create an empty data frame and loop through all the cancer project and store the output of
+## get_cnv_data function in a single data frame and store it in a csv file
+all.cancer.df <- data.frame(stringsAsFactors = FALSE)
+for (i in 1:length(cancer.project)){
+  all.cancer.df <- bind_rows(all.cancer.df, get_cnv_data(cancer.project[i]))
+}
+write.csv(all.cancer.df, file = here("data", "processed", "all_cancer_df.csv"), row.names = FALSE)
+
+#all.cancer.list <- lapply(cancer.project, function(x) get_cnv_data(x))
+```
+
+
+```{r}
+sessionInfo() # see output below
+```
+
+```{r}
+# styler
+style_file(here("src",
+                "tcga_data.Rmd"))
+
+# lintr
+lint(filename = here("src",
+                     "tcga_data.Rmd"))
 ```
 

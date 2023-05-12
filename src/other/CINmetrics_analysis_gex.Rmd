@@ -1,0 +1,557 @@
+---
+title: "CINmetrics and gene expression analysis"
+author: "Sasha Thalluri"
+date: "8/23/2021"
+output: html_document
+---
+
+This R Markdown will have the analysis to compare the CINmetrics to gene expression data. The output of this document will include UpSet Plots to visualize the common differentially expressed genes within the different CINmetrics, heatmaps of our FGSEA analysis, and bubble plots of our FGSEA analysis.
+
+
+-------------------------------------------------------------
+# CINmetrics and Gene Expression Analysis
+
+```{r}
+library(tidyverse)
+library(fgsea)
+library(ComplexHeatmap)
+library(data.table)
+library(ggplot2)
+library(reactome.db)
+library(AnnotationDbi)
+library(org.Hs.eg.db)
+library(circlize)
+library(KEGG.db)
+library(hrbrthemes)
+library(ggpubr)
+
+```
+
+# UpsetPlots
+```{r}
+# Here we load all.gex.list which was created in the CINmetrics_analysis_pi.Rmd
+load(all.gex.list)
+
+# The function creates an Upset Plot of the overlapping differentially expressed genes using the CINmetrics as a condition
+
+get_gex_upsetplots <- function(cancer.project){
+  if(length(cancer.project) == 1) {
+    # Matching Sample IDs with both datasets
+    cancer.cinmetrics.df <- all.cinmetrics.df %>% filter(project == cancer.project) %>% select(sample_id, sample_type, base_segments, break_points, tai, fga, cna, modified_tai)
+    cancer.gex <- all.gex.list[["TCGA-KIRC"]]
+    cancer.cinmetrics.df <- cancer.cinmetrics.df[sample_id %in% cancer.gex@colData$sample]
+    cancer.gex <-  cancer.gex[, cancer.gex@colData$sample %in% cancer.cinmetrics.df$sample_id]
+    
+    # Ordering both by sample so metrics line up properly 
+    cancer.gex <- cancer.gex[, order(cancer.gex@colData$sample)]
+    setorder(cancer.cinmetrics.df,
+         sample_id)
+    
+    # Combining CINmetrics Dataframe to Gene Expression Data and subsetting by tumor samples
+    cancer.gex@colData <- cbind(cancer.gex@colData, cancer.cinmetrics.df[, c(base_segments, break_points, tai, fga, cna, modified_tai)])
+    tumor.cancer.gex <- cancer.gex[, cancer.gex@colData$shortLetterCode == "TP"]
+    tumor.cancer.gex <- tumor.cancer.gex[, !is.na(tumor.cancer.gex@colData$age_at_diagnosis)]
+    
+    ###### INSERT SAVING LINE HERE ######
+    
+    # Creating DESeqDataSet
+    cancer.deseq.dataset.list <- list(base_segments = DESeqDataSet(se = na.omit(tumor.cancer.gex),
+                                                                      design = ~ gender + tumor_stage + age_at_diagnosis + base_segments),
+                                         break_points = DESeqDataSet(se = na.omit(tumor.cancer.gex),
+                                                        design = ~ gender + tumor_stage + age_at_diagnosis + break_points),
+                          tai = DESeqDataSet(se = na.omit(tumor.cancer.gex),
+                                             design = ~ gender + tumor_stage + age_at_diagnosis + tai),
+                          fga = DESeqDataSet(se = na.omit(tumor.cancer.gex),
+                                                 design = ~ gender + tumor_stage + age_at_diagnosis + fga),
+                          cna = DESeqDataSet(se = na.omit(tumor.cancer.gex),
+                                             design = ~ gender + tumor_stage + age_at_diagnosis + cna),
+                          modified_tai = DESeqDataSet(se = na.omit(tumor.cancer.gex),
+                                             design = ~ gender + tumor_stage + age_at_diagnosis + modified_tai))
+    
+    # Running DESeq2
+    cancer.deseq.analysis.list <- list(#base_segments = DESeq(object = dds.cancer.deseq.dataset.list$base_segments),
+  break_points = DESeq(object = cancer.deseq.dataset.list$break_points),
+  tai = DESeq(object = cancer.deseq.dataset.list$tai),
+  fga = DESeq(object = cancer.deseq.dataset.list$fga),
+  cna = DESeq(object = cancer.deseq.dataset.list$cna),
+  modified_tai  = DESeq(object = cancer.deseq.dataset.list$modified_tai))
+    
+    # Variance-stabilizing transform
+    cancer.vst.list <- list(#base_segments = vst(object = cancer.deseq.analysis.list$base_segments),
+  break_points = vst(object = cancer.deseq.analysis.list$break_points),
+  tai = vst(object = cancer.deseq.analysis.list$tai),
+  fga = vst(object = cancer.deseq.analysis.list$fga),
+  cna = vst(object = cancer.deseq.analysis.list$cna),
+  modified_tai = vst(object = cancer.deseq.analysis.list$modified_tai))
+    
+    # Compiling results
+    cancer.results.list <- list(#base_segments = results(object = cancer.deseq.analysis.list$base_segments),
+  break_points = results(object = cancer.deseq.analysis.list$break_points),
+  tai = results(object = cancer.deseq.analysis.list$tai),
+  fga = results(object = cancer.deseq.analysis.list$fga),
+  cna = results(object = cancer.deseq.analysis.list$cna),
+  modified_tai = results(object = cancer.deseq.analysis.list$modified_tai))
+    
+    ###### SAVE RESULTS HERE #####
+    
+    # Obtaining Gene IDS
+    gene.ids.list <- list(break_points = rownames(cancer.results.list$break_points[!is.na(cancer.results.list$break_points$padj) & cancer.results.list$break_points$padj < 0.05,]),
+                   tai = rownames(cancer.results.list$tai[!is.na(cancer.results.list$tai$padj) & cancer.results.list$tai$padj < 0.05,]),
+                   fga = rownames(cancer.results.list$fga[!is.na(cancer.results.listt$fga$padj) & res.kirc.cin.list$mod.tai$padj < 0.05,]),
+                   cna = rownames(cancer.results.list$cna[!is.na(cancer.results.list$cna$padj) & res.kirc.cin.list$cna$padj < 0.05,]),
+                   modified_tai = rownames(cancer.results.list$modified_tai[!is.na(cancer.results.list$modified_tai$padj) & cancer.results.list$modifed_tai$padj < 0.05,]))
+    
+    # Creating Upset Plots for Overlapping Genes
+    distinct.matrix <- make_comb_mat(gene.ids.list)
+    
+    ## Plots
+    set <- set_size(distinct.matrix)
+    combo <- comb_size(distinct.matrix)
+    # Creating UpSet Plot with Distinct Mode
+    distinct.upsetplot <- UpSet(distinct.matrix, set_order = c("break_points", "tai", "fga", "cna", "modified_tai"),
+                                comb_order = order(comb_size(distinct.matrix)),
+                                top_annotation = HeatmapAnnotation("Overlapping Genes" = anno_barplot(combo, ylim = c(0, max(combo)*1.1), border = FALSE, gp = gpar(fill = "black"), height = unit(4, "cm")), annotation_name_side = "left", annotation_name_rot = 90),row_title = "distinct mode") 
+    
+    # Adding Number of Overlapping Genes to Plot      
+    draw.distinct.upsetplot <- draw(distinct.upsetplot)
+    order <- column_order(draw.distinct.upsetplot)
+    decorate_annotation("Overlapping Genes", {
+    grid.text(combo[order()], x = seq_along(combo), y = unit(combo[order], "native") + unit(2, "pt"), 
+        default.units = "native", just = c("left", "bottom"), 
+        gp = gpar(fontsize = 6, col = "#404040"), rot = 45)
+})
+    
+    return(draw.distinct.upsetplot)
+    
+  } else{
+    stop("Incorrect number of cancer projects. Make sure to only have one cancer in this function")
+  }
+} 
+
+
+```
+
+------------------------------------------------------------------------
+Gene Expression Analysis -- fgsea across pan cancer types
+
+## Pathway Heatmaps
+```{r}
+# This function takes the gene.list created from the NMF data, obtains the FGSEA, and produces a heatmap to compare the pathways between cancer projects.
+
+get_pathway_heatmaps <- function(gene.list, cancer.project = "all", metrics = "all", pathway) {
+# Here we are subsetting the gene list by CINmetric 
+  if (metrics == "tai") {
+    cinmetric.gene.list <- gene.list[grep("tai", gene.list$cinmetric),]
+  } else if (metrics == "cna") {
+    cinmetric.gene.list <- gene.list[grep("cna", gene.list$cinmetric),]
+  } else if (metrics == "base_segments") {
+    cinmetric.gene.list <- gene.list[grep("base_segments", gene.list$cinmetric),]
+  } else if (metrics == "break_points") {
+    cinmetric.gene.list <- gene.list[grep("break_points", gene.list$cinmetric),]
+  } else if (metrics == "fga") {
+    cinmetric.gene.list <- gene.list[grep("fga", gene.list$cinmetric),]
+  } else{
+    cinmetric.gene.list <- gene.list
+  }
+  
+# now we have our subsetted full dataframe, time to do pathway analysis
+  # start with converting ens IDs to entrez
+    cinmetric.gene.list$entrez = mapIds(org.Hs.eg.db,
+                      keys=cinmetric.gene.list$geneid, #Column containing Ensembl gene ids
+                      column="ENTREZID",
+                      keytype="ENSEMBL",
+                      multiVals="first")
+  
+    common.fgsea.df <- data.frame(pathway = character())
+    for(i in 1:length(cancer.project)){
+      # Generating pathways and stats ranks objects for each cancer
+      cancer.subset <- subset(cinmetric.gene.list, cancer == cancer.project[i]) %>% drop_na()
+      cancer.entrez <- t(cancer.subset$entrez) %>% as.character(.) 
+      # Choosing database for pathways
+      if(pathway == "reactome"){
+      pathways <-  reactomePathways(cancer.entrez)
+      }else if(pathway == "kegg"){
+      load_kegglist <- function(org){
+        kegg_gene_list <- as.list(KEGGPATHID2EXTID) # All organisms in Kegg
+        kegg_gene_list <- kegg_gene_list[grepl(org, names(kegg_gene_list))] # Only human
+        kegg_name_list <- unlist(as.list(KEGGPATHID2NAME)) # All organisms in Kegg
+        kegg_name_list <- kegg_name_list[gsub(paste0("^", org), "", names(kegg_gene_list))]
+        names(kegg_gene_list) <- paste0(names(kegg_gene_list), " (", names(kegg_name_list), ") - ", kegg_name_list)
+        return(kegg_gene_list)
+      }
+      pathways <- load_kegglist(org = "hsa")
+      }
+      
+      cancer.direction.entrez <- cancer.subset %>% dplyr::select(direction, entrez) %>% arrange(., desc(direction))
+      cancer.direction <- cbind(as.double(cancer.direction.entrez$direction), 1)
+      rownames(cancer.direction) <- cancer.direction.entrez$entrez
+      stats <- cancer.direction[,1]
+      
+      # Running fgsea
+      if(pathway == "reactome"){
+      fgsea.result <- fgsea(pathways = pathways, 
+                  stats    = stats,
+                  minSize  = 15,
+                  maxSize  = 500)
+      } else if(pathway == "kegg"){
+        fgsea.result <- fgsea(pathways = pathways, 
+                  stats    = stats,
+                  minSize  = 5,
+                  maxSize  = 500)
+      }
+      cancer.nes <- fgsea.result %>% dplyr::select(pathway, NES)
+      colnames(cancer.nes) <- c("pathway", cancer.project[i])
+      
+      if(length(cancer.project) >= 2){
+      # If there are multiple cancers being compared
+      common.fgsea.df <- full_join(common.fgsea.df, cancer.nes, by = c("pathway")) %>% drop_na()
+      } else{
+      # If there is only one cancer 
+      common.fgsea.df <- cancer.nes
+      }
+    }
+    
+    # Creating Heatmap
+    common.fgsea.df <- column_to_rownames(common.fgsea.df, "pathway")
+    heatmap.colors <- colorRamp2(c(-1, 0, 1), c("#709AE1FF","#FFFFFF",  "#FED439FF"))
+    pathways.heatmap <- Heatmap(common.fgsea.df,
+                                width = ncol(spearman.tumor.cinmetrics)*unit(5, "mm"),
+                                height = nrow(spearman.tumor.cinmetrics)*unit(20, "mm"),
+                                col = heatmap.colors,
+                                show_row_dend = FALSE,
+                                show_column_dend = FALSE, 
+                                column_title = paste(paste("Pathways Heatmap", "(", sep = " "), metrics, ")", sep = ""),
+                                column_names_gp = gpar(fontsize = 7, fontface = "bold"),
+                                row_title = paste(paste("Pathways", "(", sep = " "), pathway, ")", sep = ""),
+                                row_names_gp = gpar(fontsize = 4, fontface = "bold"), 
+                                column_names_rot = 45,
+                                heatmap_legend_param = list(title = "NES", title_gp = gpar(fontsize = 7, fontface = "bold"))
+                                )
+
+    return(pathways.heatmap)
+}
+
+
+# Here, we make multiple heatmaps for each pathway
+metrics <- list("tai", "modified_tai", "cna","base_segments", "break_points", "fga")
+pathway <- list("reactome", "kegg")
+
+# Glioma
+for(i in metrics){
+  for(j in pathway){
+    heatmap <- get_pathway_heatmaps(glioma.gene.list, cancer.project = c("TCGA-GBM", "TCGA-LGG"), metrics = i, pathway = j)
+    file_name = paste("gliomaheatmap_", i,  j, ".pdf", sep = "")
+  pdf(file_name)
+  print(heatmap)
+  dev.off()
+  }
+}
+
+# GI
+for(i in metrics){
+  for(j in pathway){
+    heatmap <- get_pathway_heatmaps(except.glioma.gene.list, cancer.project = c("TCGA-READ", "TCGA-STAD", "TCGA-COAD", "TCGA-ESCA"), metrics = i, pathway = j)
+    file_name = paste("giheatmap_", i,  j, ".pdf", sep = "")
+  pdf(file_name)
+  print(heatmap)
+  dev.off()
+  }
+}
+
+# Kidney
+for(i in metrics){
+  for(j in pathway){
+    heatmap <- get_pathway_heatmaps(except.glioma.gene.list, cancer.project = c("TCGA-KIRC", "TCGA-KIRP"), metrics = i, pathway = j)
+    file_name = paste("kidneyheatmap_", i,  j, ".pdf", sep = "")
+  pdf(file_name)
+  print(heatmap)
+  dev.off()
+  }
+}
+
+# Gyn
+for(i in metrics){
+  for(j in pathway){
+    heatmap <- get_pathway_heatmaps(except.glioma.gene.list, cancer.project = c("TCGA-BRCA", "TCGA-OV", "TCGA-UCS", "TCGA-UCEC", "TCGA-CESC"), metrics = i, pathway = j)
+    file_name = paste("gynheatmap_", i,  j, ".pdf", sep = "")
+  pdf(file_name)
+  print(heatmap)
+  dev.off()
+  }
+}
+
+# Squamous Cell
+for(i in metrics){
+  for(j in pathway){
+    heatmap <- get_pathway_heatmaps(except.glioma.gene.list, cancer.project = c("TCGA-LUSC", "TCGA-HNSC", "TCGA-CESC", "TCGA-ESCA", "TCGA-BLCA"), metrics = i, pathway = j)
+    file_name = paste("squamousheatmap_", i,  j, ".pdf", sep = "")
+  pdf(file_name)
+  print(heatmap)
+  dev.off()
+  }
+}
+
+
+```
+
+
+
+## Pathway Analysis for FGSEA
+```{r}
+# This function takes the gene.list created from the NMF data, obtains the FGSEA results
+
+get_pathway_analysis <- function(gene.list, cancer.project, metrics = c("tai", "cna","base_segments", "break_points", "fga"), pathway) {
+
+
+  # Subset by cancer.project
+  cancer.gene.list <- subset(gene.list, cancer == cancer.project) %>% drop_na()
+  
+  # Convert ENSEMBL IDs to ENTREZ for Kegg Pathways
+    cancer.gene.list$entrez = mapIds(org.Hs.eg.db,
+                      keys=cancer.gene.list$geneid, #Column containing Ensembl gene ids
+                      column="ENTREZID",
+                      keytype="ENSEMBL",
+                      multiVals="first")
+    # Creating an empty dataframe to store fgsea analysis
+    cancer.fgsea.df <- data.frame(pathway = character())
+    
+    for(i in 1:length(metrics)){
+      # Generating pathways and stats ranks objects for each cancer
+      metric.subset <- dplyr::filter(cancer.gene.list, cinmetric == metrics[i]) %>% drop_na()
+      metric.entrez <- t(metric.subset$entrez) %>% as.character(.) 
+      # Obtaining Kegg Pathways
+      load_kegglist <- function(org){
+        kegg_gene_list <- as.list(KEGGPATHID2EXTID) # All organisms in Kegg
+        kegg_gene_list <- kegg_gene_list[grepl(org, names(kegg_gene_list))] # Only human
+        kegg_name_list <- unlist(as.list(KEGGPATHID2NAME)) # All organisms in Kegg
+        kegg_name_list <- kegg_name_list[gsub(paste0("^", org), "", names(kegg_gene_list))]
+        names(kegg_gene_list) <- paste0(names(kegg_gene_list), " (", names(kegg_name_list), ") - ", kegg_name_list)
+      return(kegg_gene_list)
+      }
+      pathways <- load_kegglist(org = "hsa")
+      metric.direction.entrez <- metric.subset %>% dplyr::select(direction, entrez) %>% arrange(., desc(direction))
+      metric.direction <- cbind(as.double(metric.direction.entrez$direction), 1)
+      rownames(metric.direction) <- metric.direction.entrez$entrez
+      stats <- metric.direction[,1]
+      
+      # Performing FSEA
+      fgsea.result <- fgsea(pathways = pathways, 
+                  stats    = stats,
+                  minSize  = 5,
+                  maxSize  = 200)
+      metric.nes <- fgsea.result %>% dplyr::select(pathway, size, padj, NES) 
+      
+      #colnames(metric.nes) <- c("pathway", paste("size", metrics[i], sep = "_"), paste("padj", metrics[i], sep = "_"), metrics[i])
+      metric.nes$cinmetric <- metrics[i]
+      if(length(metrics) >= 2){
+      # If there are multiple metrics being compared
+      cancer.fgsea.df <- rbind(cancer.fgsea.d2f, metric.nes) 
+     } else{
+      # If there is only one metric
+      cancer.fgsea.df <- metric.nes
+     }
+      
+    }
+      cancer.fgsea.df$project <- cancer.project
+      return(cancer.fgsea.df)
+    }
+    
+
+
+# Creating NES dfs for each cancer out of the gene list 
+for (i in cancer.project){
+  nes.df <- get_pathway_analysis(gene.list, cancer.project =  i, metrics = c("tai", "cna","base_segments", "break_points", "fga"), pathway = "kegg")
+  assign(paste(tolower(gsub("TCGA-", "", i)), "nes.df", sep = "."), nes.df) 
+}
+
+all.nes.df <- do.call("rbind",mget(ls(pattern = "*.nes.df")))
+
+
+```
+
+## FGSEA Bubble plots
+```{r}
+# This function takes the pathway analysis df output from the previous function and creates bubble plots of the pathway analysis by metric. The size of the bubble represents the number of genes in that particular pathway mapped. Code adapted from:
+
+get_pathway_bubbleplot <- function(nes.df, cancer.project, metrics){
+  
+  # Here we set the size of the bubble plot
+  aspect <- 3
+  # Here we subset the nes.df to have the specific information we need for our bubble plot
+  metric.nes.df <- nes.df %>% dplyr::select(pathway, size, padj, NES, cinmetric) %>% as.data.frame()
+  
+  # This code is commented out, but this can be included to have the fdr.cutoff. Make sure to fix the variable name in the next line of code after this line. Specifically, change metric.nes.df to filtered.nes.df
+  #filtered.nes.df <- renamed.nes.df[renamed.nes.df[,"padj"] < fdr.cutoff,]
+  
+  # Here we order the df by padj value
+  ordered.nes.df <- metric.nes.df[order(metric.nes.df["padj",])]
+
+  # Here we plot our FGSEA analysis
+  bubbleplot <- ggplot(ordered.nes.df, aes(x = NES, 
+                                            y = pathway, 
+                                            size = size)) +
+    geom_point(aes(fill = cinmetric, colour = cinmetric),
+                   shape = 21) +
+    labs(title = cancer.project,
+              #subtitle = metrics[i],
+              caption = "Using FGSEA across all CINmetrics") +
+    theme_ipsum() +
+    #xlim(0, fdr.cutoff) +
+    #scale_size_area(max_size = 10, guide = "none") +
+    scale_size(range = c(1, 10), name ="Number of Genes Mapped") +
+    #scale_fill_gradient2(low = neg.nes, mid = "white", high = pos.nes) + 
+    #theme(axis.text.y = element_text(color = pathway.color)) +
+    theme(axis.text.y = element_text(size = 7))
+  
+  return(bubbleplot)
+  
+}
+
+
+# Creating bubble plot variables for each cancer project
+cancer.project <- c("TCGA-KIRC", "TCGA-BRCA", "TCGA-SARC", "TCGA-MESO", "TCGA-READ", "TCGA-KIRP", "TCGA-PAAD", "TCGA-GBM", "TCGA-ACC", "TCGA-CESC", "TCGA-ESCA", "TCGA-DLBC", "TCGA-KICH", "TCGA-UVM", "TCGA-LAML", "TCGA-SKCM", "TCGA-PCPG", "TCGA-COAD", "TCGA-UCS", "TCGA-LUSC", "TCGA-LGG", "TCGA-HNSC", "TCGA-TGCT", "TCGA-THCA", "TCGA-LIHC", "TCGA-BLCA", "TCGA-UCEC", "TCGA-PRAD", "TCGA-OV", "TCGA-THYM", "TCGA-CHOL", "TCGA-STAD", "TCGA-LUAD")
+
+for(i in cancer.project){
+  # Subsetting by cancer
+  cancer.nes.df <- subset(all.nes.df, project == i) 
+  bubbleplot <- get_pathway_bubbleplot(cancer.nes.df, cancer.project = i, metrics)
+  assign(paste(tolower(gsub("TCGA-", "", i)), "bubbleplot", sep = "."), bubbleplot)
+}
+
+# Here we can group plots based on cancer bucket
+# Kidney Plot
+kidney.bubbleplot <-  ggarrange(kirc.bubbleplot,
+                                kirp.bubbleplot, 
+                                   ncol = 2, nrow = 1, 
+                                   legend = "right",
+                                   common.legend = TRUE)
+# Glioma Plot
+glioma.bubbleplot <-  ggarrange(lgg.bubbleplot,
+                                gbm.bubbleplot, 
+                                   ncol = 2, nrow = 1, 
+                                   legend = "right",
+                                   common.legend = TRUE)
+
+# GI Plot
+gi.bubbleplot <-  ggarrange(read.bubbleplot,
+                            stad.bubbleplot, 
+                            coad.bubbleplot,
+                            esca.bubbleplot,
+                            ncol = 2, nrow = 2,
+                            legend = "right",
+                            common.legend = TRUE)
+
+# Squamous Plot
+squamous.bubbleplot <- ggarrange(lusc.bubbleplot,
+                                 hnsc.bubbleplot, 
+                                 cesc.bubbleplot,
+                                 esca.bubbleplot,
+                                 blca.bubbleplot,
+                                 ncol = 3, nrow = 2,
+                                 legend = "right",
+                                 common.legend = TRUE)
+
+# Gyn Plot
+gyn.bubbleplot <- ggarrange(brca.bubbleplot,
+                            ov.bubbleplot,
+                            ucs.bubbleplot,
+                            ucec.bubbleplot,
+                            cesc.bubbleplot,
+                            ncol = 3, nrow = 2,
+                            legend = "right",
+                            common.legend = TRUE)
+
+
+
+
+
+
+
+```
+
+
+## Testing out intersecting genes 
+```{r}
+# This function takes the gene.list created from the NMF data, intersects with common genes based on analysis, and obtains the FGSEA. This is not completed because I was having trouble figuring out how to make this code functional for any metric or cancer. 
+
+get_intersecting_fgsea <- function(gene.list, cancer.project, metrics = c("tai", "cna","base_segments", "break_points", "fga"), pathway){
+  
+  # Filtering gene lists based on cancer.project and finding duplicates
+  filtered.gene.list <- gene.list %>% filter(., cancer %in% cancer.project)
+  for (i in length(metrics)){
+  
+  
+  
+#   # Subset by cancer.project
+#   cancer1.gene.list <- subset(gene.list, cancer == cancer.project[1]) %>% drop_na() %>% dplyr::select(-cancer)
+#   colnames(cancer1.gene.list) <- c("geneid", paste("direction", tolower(gsub("TCGA-", "", cancer.project[1])), sep = "_"), paste("pvalue", tolower(gsub("TCGA-", "", cancer.project[1])), sep = "_"), "cinmetric")
+# 
+#   cancer2.gene.list <- subset(gene.list, cancer == cancer.project[2]) %>% drop_na() %>% dplyr::select(-cancer)
+#   colnames(cancer2.gene.list) <- c("geneid", paste("direction", tolower(gsub("TCGA-", "", cancer.project[2])), sep = "_"), paste("pvalue", tolower(gsub("TCGA-", "", cancer.project[2])), sep = "_"), "cinmetric")
+# 
+#   # Intersecting between the genes
+#   intersected.gene.list <- merge(cancer1.gene.list, cancer2.gene.list, by.x = c("geneid", "cinmetric"), by.y = c("geneid", "cinmetric"))
+                  
+  return(filtered.gene.list) 
+}
+
+
+test.glioma.duplicated.genes <- get_intersecting_fgsea(gene.list, cancer.project = c("TCGA-GBM", "TCGA-LGG"))
+
+# 
+# 
+# test <- get_intersecting_fgsea(gene.list, cancer.)
+# 
+#   # Convert ENSEMBL IDs to ENTREZ for Kegg Pathways
+#     intersected.gene.list$entrez = mapIds(org.Hs.eg.db,
+#                       keys=cancer.gene.list$geneid, #Column containing Ensembl gene ids
+#                       column="ENTREZID",
+#                       keytype="ENSEMBL",
+#                       multiVals="first")
+#     # Creating an empty dataframe to store fgsea analysis
+#     cancer1.fgsea.df <- data.frame(pathway = character())
+#     cancer.projects <- c(cancer.project1, cancer.project2)
+#     
+#     for(i in 1:length(metrics)){
+#       # Generating pathways and stats ranks objects for each cancer
+#       metric.subset <- dplyr::filter(cancer.gene.list, cinmetric == metrics[i]) %>% drop_na()
+#       metric.entrez <- t(metric.subset$entrez) %>% as.character(.) 
+#       # Obtaining Kegg Pathways
+#       load_kegglist <- function(org){
+#         kegg_gene_list <- as.list(KEGGPATHID2EXTID) # All organisms in Kegg
+#         kegg_gene_list <- kegg_gene_list[grepl(org, names(kegg_gene_list))] # Only human
+#         kegg_name_list <- unlist(as.list(KEGGPATHID2NAME)) # All organisms in Kegg
+#         kegg_name_list <- kegg_name_list[gsub(paste0("^", org), "", names(kegg_gene_list))]
+#         names(kegg_gene_list) <- paste0(names(kegg_gene_list), " (", names(kegg_name_list), ") - ", kegg_name_list)
+#       return(kegg_gene_list)
+#       }
+#       pathways <- load_kegglist(org = "hsa")
+#       metric.direction.entrez <- metric.subset %>% dplyr::select(direction, entrez) %>% arrange(., desc(direction))
+#       metric.direction <- cbind(as.double(metric.direction.entrez$direction), 1)
+#       rownames(metric.direction) <- metric.direction.entrez$entrez
+#       stats <- metric.direction[,1]
+#       
+#       # Performing FSEA
+#       fgsea.result <- fgsea(pathways = pathways, 
+#                   stats    = stats,
+#                   minSize  = 5,
+#                   maxSize  = 200)
+#       metric.nes <- fgsea.result %>% dplyr::select(pathway, size, padj, NES) 
+#       #return(metric.nes)
+#       #colnames(metric.nes) <- c("pathway", paste("size", metrics[i], sep = "_"), paste("padj", metrics[i], sep = "_"), metrics[i])
+#       metric.nes$cinmetric <- metrics[i]
+#       
+#       if(length(metrics) >= 2){
+#       # If there are multiple metrics being compared
+#       cancer.fgsea.df <- rbind(cancer.fgsea.df, metric.nes) 
+#      } else{
+#       # If there is only one cancer 
+#       cancer.fgsea.df <- metric.nes
+#      }
+#       
+#     }
+#       cancer.fgsea.df$project <- cancer.project
+#       return(cancer.fgsea.df)
+
+}
+```

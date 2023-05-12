@@ -1,0 +1,440 @@
+---
+title: "CINmetrics analysis"
+author: "Sasha Thalluri"
+date: "8/23/2021"
+output: html_document
+---
+
+This R Markdown will have the analysis to compare the CINmetrics to one another across the 33 cancers in TCGA. The output of this document will include corr plots, heatmaps, ridgeline plots, and strip chart.
+
+-------------------------------------------------------------------
+## CINmetrics Analysis with CINmetrics Package
+
+```{r}
+# These are the packages that are used throughout this R Markdown
+library(CINmetrics)
+library(tidyverse)
+library(ggpubr)
+library(here)
+library(ComplexHeatmap)
+library(circlize)
+library(reshape2)
+library(RColorBrewer)
+library(grid)
+library(gridExtra)
+library(cowplot)
+set.seed("223")
+```
+
+## Creating CINmetrics Dataframe
+```{r}
+## Here, we load the data with all of the CNV data that was created in the tcga_data.Rmd 
+all.cancer.df <- read.csv(here("data", "processed", "all_cancer_df.csv"))
+
+## This function takes the all.cancer.df and calculates all of the CINmetrics. Afterward, each CINmetric calculation is merged with the corresponding Patient ID, TCGA project name, and sample type.
+
+get_cinmetrics <- function(all.cancer.df){
+# Calculating CINmetrics
+modified.tai.cancer <- taiModified(all.cancer.df)
+cinmetrics.cancer <- CINmetrics(all.cancer.df)
+cinmetrics.cancer <- inner_join(cinmetrics.cancer, modified.tai.cancer, by = "sample_id")
+
+# Adding Patient ID, Project, and Sample Type Columns to Dataframe
+cinmetrics.cancer <- cinmetrics.cancer %>% separate(sample_id, "patient_id", 12, remove = FALSE)
+all.cinmetrics.df <- inner_join(cinmetrics.cancer, all.cancer.df[,c(7,10,11)], by = c("sample_id" = "Sample")) %>% unique(.) %>% select("sample_id", "patient_id", "project", "sample_type", "tai", "modified_tai", "cna", "base_segments", "break_points", "fga")
+
+## We store the output as a csv
+write.csv(all.cinmetrics.df, file = here("data", "processed", "all_cinmetrics_df.csv"), row.names = FALSE)
+return(all.cinmetrics.df)
+}
+
+# Obtaining a dataframe with all of the CINmetrics for each sample across the 33 cancer types in TCGA
+all.cinmetrics.df <- get_cinmetrics(all.cancer.df)
+#all.cinmetrics.df <- read_csv(here("data", "processed", "all_cinmetrics_df.csv"))
+
+```
+
+## Creating CINmetrics Stripchart
+```{r}
+## This function will take the dataframe with all of the CINmetrics values (all.cinmetrics.df) and will plot a Strip Chart for all of the CINmetrics across all 33 cancers to show the distribution between the normal and tumor samples.
+
+get_cinmetrics_stripchart <- function(all.cinmetrics.df){
+  
+  # Grouping different sample types by normal and tumor samples
+  all.cinmetrics.df$sample_type <- ifelse(all.cinmetrics.df$sample_type %in% c("Blood Derived Normal", "Solid Tissue Normal", "Bone Marrow Normal", "Buccal Cell Normal"), "Normal", all.cinmetrics.df$sample_type)
+  all.cinmetrics.df$sample_type  <- ifelse(all.cinmetrics.df$sample_type  %in% c("Metastatic", "Primary Blood Derived Cancer", "Primary Tumor", "Recurrent Tumor", "Additional - New Primary", "Primary Blood Derived Cancer - Peripheral Blood"), "Tumor", all.cinmetrics.df$sample_type )
+  
+  # Removing 'TCGA-' out of project name
+  all.cinmetrics.df$project <- str_remove(all.cinmetrics.df$project, "TCGA-") 
+  
+  # Plotting all Strip Chart for each CINmetric across the 33 different cancer types
+  # Base Segments Plot
+  base.segments.stripchart <- ggstripchart(all.cinmetrics.df,
+                                      x = "project", y = "base_segments", 
+                                      fill = "sample_type", 
+                                      color = "sample_type", 
+                                      palette = c("#800000FF","#FFA319FF"), 
+                                      size = .1, 
+                                      xlab = "Cancer", 
+                                      ylab = "log10(Base Segments)",
+                                      yscale = "log10",
+                                      format.scale = TRUE,
+                                      position = position_jitterdodge(jitter.width = .7, jitter.height = .5, dodge.width = 0), 
+                                      rotate = TRUE,
+                                      alpha = .5, 
+                                      combine = TRUE,
+                                      title = "Base Segments",
+                                      font.main = c(11, "bold"),
+                                      font.x = c(10, "bold"),
+                                      font.y = c(10, "bold"),
+                                      font.xtickslab = c(10, "bold"),
+                                      font.ytickslab = c(7, "bold"),
+                                      legend.title = "Sample Type",
+                                      font.legend = c(10, "bold"), 
+                                      add = "mean_sd", add.params = list(size = .03, alpha = 1, group = "sample_type", color = "black")) +  guides(color = guide_legend(override.aes = list(size = 5)))
+  
+  
+  # Number of Breakpoints Plot
+  break.points.stripchart <- ggstripchart(all.cinmetrics.df,
+                                      x = "project", y = "break_points", 
+                                      fill = "sample_type", 
+                                      color = "sample_type", 
+                                      palette = c("#800000FF","#FFA319FF"), 
+                                      size = .1, 
+                                      xlab = "Cancer", 
+                                      ylab = "log10(Break Points)",
+                                      yscale = "log10",
+                                      format.scale = TRUE,
+                                      position = position_jitterdodge(jitter.width = .7, jitter.height = .5 ,dodge.width = 0), 
+                                      rotate = TRUE,
+                                      alpha = .5, 
+                                      combine = TRUE,
+                                      title = "Break Points",
+                                      font.main = c(11, "bold"),
+                                      font.x = c(10, "bold"),
+                                      font.y = c(10, "bold"),
+                                      font.xtickslab = c(10, "bold"),
+                                      font.ytickslab = c(7, "bold"),
+                                      legend.title = "Sample Type",
+                                      font.legend = c(10, "bold"),
+                                      add = "mean_sd", add.params = list(size = .03, alpha = 1, group = "sample_type", color = "black")) +  guides(color = guide_legend(override.aes = list(size = 5)))
+  
+  # Total Aberration Index Plot
+  tai.stripchart <- ggstripchart(all.cinmetrics.df,
+                                      x = "project", y = "tai", 
+                                      fill = "sample_type", 
+                                      color = "sample_type", 
+                                      palette = c("#800000FF","#FFA319FF"), 
+                                      size = .1, 
+                                      xlab = "Cancer", 
+                                      ylab = "log10(TAI)",
+                                      yscale = "log10",
+                                      format.scale = TRUE,
+                                      position = position_jitterdodge(jitter.width = .7, jitter.height = .5, dodge.width = 0), 
+                                      rotate = TRUE,
+                                      alpha = .5, 
+                                      combine = TRUE,
+                                      title = "TAI",
+                                      font.main = c(11, "bold"),
+                                      font.x = c(10, "bold"),
+                                      font.y = c(10, "bold"),
+                                      font.xtickslab = c(10, "bold"),
+                                      font.ytickslab = c(7, "bold"),
+                                      legend.title = "Sample Type",
+                                      font.legend = c(10, "bold"),
+                                      add = "mean_sd", add.params = list(size = .03, alpha = 1, group = "sample_type", color = "black")) +  guides(color = guide_legend(override.aes = list(size = 5)))
+  
+  # Fraction of Genome Altered Plot
+  fga.stripchart <- ggstripchart(all.cinmetrics.df,
+                                      x = "project", y = "fga", 
+                                      fill = "sample_type", 
+                                      color = "sample_type", 
+                                      palette = c("#800000FF","#FFA319FF"), 
+                                      size = .1, 
+                                      xlab = "Cancer", 
+                                      ylab = "log10(FGA)",
+                                      yscale = "log10",
+                                      format.scale = TRUE,
+                                      position = position_jitterdodge(jitter.width = .7, jitter.height = .5 ,dodge.width = 0), 
+                                      rotate = TRUE,
+                                      alpha = .5, 
+                                      combine = TRUE,
+                                      title = "FGA",
+                                      font.main = c(11, "bold"),
+                                      font.x = c(10, "bold"),
+                                      font.y = c(10, "bold"),
+                                      font.xtickslab = c(10, "bold"),
+                                      font.ytickslab = c(7, "bold"),
+                                      legend.title = "Sample Type",
+                                      font.legend = c(10, "bold"),
+                                      add = "mean_sd", add.params = list(size = .03, alpha = 1, group = "sample_type", color = "black")) +  guides(color = guide_legend(override.aes = list(size = 5)))
+  
+  # Copy Number Aberrations Plot
+  cna.stripchart <- ggstripchart(all.cinmetrics.df,
+                                      x = "project", y = "cna", 
+                                      fill = "sample_type", 
+                                      color = "sample_type", 
+                                      palette = c("#800000FF","#FFA319FF"), 
+                                      size = .1, 
+                                      xlab = "Cancer", 
+                                      ylab = "log10(CNA)",
+                                      yscale = "log10",
+                                      format.scale = TRUE,
+                                      position = position_jitterdodge(jitter.width = .7, jitter.height = .5 ,dodge.width = 0), 
+                                      rotate = TRUE,
+                                      alpha = .5, 
+                                      combine = TRUE,
+                                      title = "CNA",
+                                      font.main = c(11, "bold"),
+                                      font.x = c(10, "bold"),
+                                      font.y = c(10, "bold"),
+                                      font.xtickslab = c(10, "bold"),
+                                      font.ytickslab = c(7, "bold"),
+                                      legend.title = "Sample Type",
+                                      font.legend = c(10, "bold"),
+                                      add = "mean_sd", add.params = list(size = .03, alpha = 1, group = "sample_type", color = "black")) +  guides(color = guide_legend(override.aes = list(size = 5)))
+  
+  # Modified Total Aberration Index Plot
+  modified.tai.stripchart <- ggstripchart(all.cinmetrics.df,
+                                      x = "project", y = "modified_tai", 
+                                      fill = "sample_type", 
+                                      color = "sample_type", 
+                                      palette = c("#800000FF","#FFA319FF"), 
+                                      size = .1, 
+                                      xlab = "Cancer", 
+                                      ylab = "log10(Modified TAI)",
+                                      yscale = "log10",
+                                      format.scale = TRUE,
+                                      position = position_jitterdodge(jitter.width = .7, jitter.height = .5 ,dodge.width = 0), 
+                                      rotate = TRUE,
+                                      alpha = .5, 
+                                      combine = TRUE,
+                                      title = "Modified TAI",
+                                      font.main = c(11, "bold"),
+                                      font.x = c(10, "bold"),
+                                      font.y = c(10, "bold"),
+                                      font.xtickslab = c(10, "bold"),
+                                      font.ytickslab = c(7, "bold"),
+                                      legend.title = "Sample Type",
+                                      font.legend = c(14, "bold"),
+                                      add = "mean_sd", add.params = list(size = .03, alpha = 1, group = "sample_type", color = "black")) +  guides(color = guide_legend(override.aes = list(size = 5)))
+  
+  # CINmetrics Plot
+  cinmetrics.stripchart <- ggarrange(base.segments.stripchart, 
+                                   break.points.stripchart, 
+                                   tai.stripchart, 
+                                   fga.stripchart, 
+                                   cna.stripchart,
+                                   modified.tai.stripchart, 
+                                   ncol = 3, nrow = 2, 
+                                   legend = "right",
+                                   common.legend = TRUE)
+  
+  return(cinmetrics.stripchart)
+}
+
+# Creating a Strip Chart with all of the CINmetrics for each sample across the 33 cancer types in TCGA
+cinmetrics.stripchart <- get_cinmetrics_stripchart(all.cinmetrics.df)
+
+png(here("fig","CINmetrics_stripchart.png"), width = 12, height = 8, units = 'in', res = 350)
+cinmetrics.stripchart
+dev.off
+
+```
+
+## Creating CINmetrics Heatmaps
+```{r}
+## This function will take the all.cinmetrics.df, subset the tumor samples, and will plot a heatmap for all of the CINmetrics across all 33 cancers. For sample.type, "normal" or "tumor" will be the input to produce the correct heatmap based on sample types. 
+
+get_cinmetrics_heatmap <- function(all.cinmetrics.df, sample.type){
+
+# Creating a Heatmap for Normal samples
+if(sample.type == "normal"){
+# Subsetting all.cinmetrics.df by normal samples
+normal.cinmetrics.df <- all.cinmetrics.df %>% filter(sample_type %in% c("Blood Derived Normal", "Solid Tissue Normal", "Bone Marrow Normal", "Buccal Cell Normal"))
+
+# Performing Spearman's correlation across all CINmetrics values in normal samples
+spearman.normal.cinmetrics <- normal.cinmetrics.df %>% select(tai, modified_tai, cna, base_segments, break_points, fga) %>% cor(., method = "spearman")
+ht_opt(heatmap_column_names_gp = gpar(fontface = "bold", fontsize = 14),
+       heatmap_row_names_gp = gpar(fontface = "bold", fontsize = 14),
+       heatmap_column_title_gp = gpar(fontface = "bold", fontsize = 14),
+       legend_border = "black", legend_labels_gp = gpar(fontface = "bold", fontsize = 12),
+       heatmap_border = TRUE)
+
+# Heatmap of Spearman's correlation for normal samples
+heatmap.colors <- colorRamp2(c(-1, 0, 1), c("#FFA319FF","#767676FF","#800000FF"))
+normal.cinmetrics.heatmap <- Heatmap(spearman.normal.cinmetrics,
+                                    width = ncol(spearman.normal.cinmetrics)*unit(15, "mm"),
+                                    height = nrow(spearman.normal.cinmetrics)*unit(15, "mm"),
+                                    col = heatmap.colors,
+                                    show_row_dend = FALSE,
+                                    show_column_dend = FALSE,
+                                    column_title = "Normal",
+                                    column_title_gp = gpar(fontsize = 10, fontface = "bold"),
+                                    row_labels = c("TAI", "Modified TAI", "CNA", "Base Segments", "Break Points", "FGA"),
+                                    row_names_gp = gpar(fontsize = 7, fontface = "bold"),
+                                    column_labels = c("TAI", "Modified TAI", "CNA", "Base Segments", "Break Points", "FGA"),
+                                    column_names_gp = gpar(fontsize = 7, fontface = "bold"),
+                                    column_names_rot = 45,
+                                    heatmap_legend_param = list(title = "Spearman's Rho", title_gp = gpar(fontsize = 7, fontface = "bold")))
+return(normal.cinmetrics.heatmap)
+}
+# Creating a Heatmap for Tumor samples
+if(sample.type == "tumor"){
+# Subsetting all.cinmetrics.df by tumor samples
+tumor.cinmetrics.df <- all.cinmetrics.df %>% filter(sample_type %in% c("Metastatic", "Primary Blood Derived Cancer", "Primary Tumor", "Recurrent Tumor", "Additional - New Primary", "Primary Blood Derived Cancer - Peripheral Blood"))
+# Performing Spearman's correlation across all CINmetrics values in tumor samples
+spearman.tumor.cinmetrics <- tumor.cinmetrics.df %>% select(tai, modified_tai, cna, base_segments, break_points, fga) %>% drop_na() %>% cor(., method = "spearman")
+# Heatmap of Spearman's correlation for tumor samples
+heatmap.colors <- colorRamp2(c(-1, 0, 1), c("#FFA319FF","#767676FF","#800000FF"))
+tumor.cinmetrics.heatmap <- Heatmap(spearman.tumor.cinmetrics,
+                                    width = ncol(spearman.tumor.cinmetrics)*unit(15, "mm"),
+                                    height = nrow(spearman.tumor.cinmetrics)*unit(15, "mm"),
+                                    col = heatmap.colors,
+                                    show_row_dend = FALSE,
+                                    show_column_dend = FALSE,
+                                    column_title = "Tumor",
+                                    column_title_gp = gpar(fontsize = 10, fontface = "bold"),
+                                    row_labels = c("TAI", "Modified TAI", "CNA", "Base Segments", "Break Points", "FGA"),
+                                    row_names_gp = gpar(fontsize = 7, fontface = "bold"),
+                                    column_labels = c("TAI", "Modified TAI", "CNA", "Base Segments", "Break Points", "FGA"),
+                                    column_names_gp = gpar(fontsize = 7, fontface = "bold"),
+                                    column_names_rot = 45,
+                                    show_heatmap_legend = TRUE, heatmap_legend_param = list(title = "Spearman's Rho", title_gp = gpar(fontsize = 7, fontface = "bold"), legend_direction = "horizontal"))
+
+return(tumor.cinmetrics.heatmap)
+}
+}
+
+# Creating Heatmaps with the Spearman Rho values across all of the CINmetrics in normal and tumor samples
+normal.cinmetrics.heatmap <- get_cinmetrics_heatmap(all.cinmetrics.df, sample.type = "normal")
+normal.cinmetrics.heatmap
+
+tumor.cinmetrics.heatmap <- get_cinmetrics_heatmap(all.cinmetrics.df, sample.type = "tumor")
+tumor.cinmetrics.heatmap
+
+
+```
+
+
+```{r}
+## This function will subset the tumor samples from the all.cinmetrics.df and plot a heatmap for all of the CINmetrics separated by each of the 33 cancers. This function can only be used if there are 2 or more cancers being compared.
+
+get_cinmetrics_cancer_heatmap <- function(all.cinmetrics.df, sample.type){
+  if(sample.type == "tumor"){
+    # Subsetting all.cinmetrics.df by tumor samples
+    tumor.cinmetrics.df <- all.cinmetrics.df %>% filter(sample_type %in% c("Metastatic", "Primary Blood Derived Cancer", "Primary Tumor", "Recurrent Tumor", "Additional - New Primary", "Primary Blood Derived Cancer - Peripheral Blood"))
+    
+    # Creating df with Spearman Rho values from CINmetrics in each cancer
+    spearman.variables <- names(tumor.cinmetrics.df)[c(5:10)]
+    all.spearman.df <- tumor.cinmetrics.df %>% drop_na %>% split(.$project) %>% map(select, spearman.variables) %>% map(function(x) cor(x, method = "spearman")) %>% map(melt) %>% melt(.) %>% select(-"variable")
+    names(all.spearman.df) <- c("cinmetric1", "cinmetric2", "spearman_rho", "project")
+    
+    # Filtering dataframe to have rows we will use for heatmap to compare Spearman Rhos values from each CINmetric with each other and inserting a column with comparison name to use in heatmap
+    filtered.spearman.df <- filter(all.spearman.df, (cinmetric1 == "base_segments" & cinmetric2 %in% c("break_points", "cna", "fga", "modified_tai", "tai")) | (cinmetric1== "break_points" & cinmetric2 %in% c("cna", "modified_tai", "tai")) | (cinmetric1 == "cna" & cinmetric2 %in% c("modified_tai", "tai")) | (cinmetric1 == "fga" & cinmetric2 %in% c("break_points", "cna", "modified_tai", "tai")) | (cinmetric1 == "modified_tai" & cinmetric2 == "tai")) %>%
+      mutate(comparison = ifelse(cinmetric1 %in%  "base_segments" & cinmetric2 %in% "break_points", "Base Segments vs Break Points", ifelse(cinmetric1 %in% "base_segments" & cinmetric2 %in% "cna", "Base Segments vs CNA", ifelse(cinmetric1 %in% "base_segments" & cinmetric2 %in% "fga", "Base Segments vs FGA", ifelse(cinmetric1 %in% "base_segments" & cinmetric2 %in% "modified_tai", "Base Segments vs Modified TAI", ifelse(cinmetric1 %in% "base_segments" & cinmetric2 %in% "tai", "Base Segments vs TAI", ifelse(cinmetric1 %in% "break_points" & cinmetric2 %in% "cna", "Break Points vs CNA", ifelse(cinmetric1 %in% "break_points" & cinmetric2 %in% "modified_tai", "Break Points vs Modified TAI", ifelse(cinmetric1 %in% "break_points" & cinmetric2 %in% "tai", "Break Points vs TAI", ifelse(cinmetric1 %in% "cna" & cinmetric2 %in% "modified_tai", "CNA vs Modified TAI", ifelse(cinmetric1 %in% "cna" & cinmetric2 %in% "tai", "CNA vs TAI", ifelse(cinmetric1 %in% "fga" & cinmetric2 %in% "break_points", "FGA vs Break Points", ifelse(cinmetric1 %in% "fga" & cinmetric2 %in% "cna", "FGA vs CNA", ifelse(cinmetric1 %in% "fga" & cinmetric2 %in% "modified_tai", "FGA vs Modified TAI", ifelse(cinmetric1 %in% "fga" & cinmetric2 %in% "tai", "FGA vs TAI", ifelse(cinmetric1 %in% "modified_tai" & cinmetric2 %in% "tai", "Modified TAI vs TAI", "NA"))))))))))))))))
+    
+    # Transforming dataframe to use for heatmap
+    transformed.spearman.df <- filtered.spearman.df %>% select(project, comparison, spearman_rho) %>% pivot_wider(names_from = comparison, values_from = spearman_rho)
+    transformed.spearman.df$project <- str_remove(transformed.spearman.df$project, "TCGA-") 
+    transformed.spearman.df <- column_to_rownames(transformed.spearman.df, var = "project")
+    transposed.spearman.df <- as.data.frame(t(transformed.spearman.df ))
+    
+    # Creating Heatmap
+    heatmap.colors <- colorRamp2(c(-1, 0, 1), c("#FFA319FF","#767676FF","#800000FF"))
+    tumor.cancer.heatmap <- Heatmap(transposed.spearman.df,
+                                    width = ncol(transposed.spearman.df)*unit(4, "mm"),
+                                    height = nrow(transposed.spearman.df)*unit(11, "mm"),
+                                    rect_gp = gpar(col = "white", lwd = .5),
+                                    col = heatmap.colors,
+                                    show_column_dend = TRUE,
+                                    show_row_dend = FALSE,
+                                    column_title = "Tumor",
+                                    column_title_gp = gpar(fontsize = 10, fontface = "bold"),
+                                    row_names_gp = gpar(fontsize = 7, fontface = "bold"),
+                                    column_names_gp = gpar(fontsize = 7, fontface = "bold"),
+                                    column_names_rot = 45,
+                                    heatmap_legend_param = list(title = "Spearman's Rho", title_gp = gpar(fontsize = 7, fontface = "bold")))
+    return(tumor.cancer.heatmap)
+  }
+    if(sample.type == "normal"){
+    # Subsetting all.cinmetrics.df by normal samples
+    normal.cinmetrics.df <- all.cinmetrics.df %>% filter(sample_type %in% c("Blood Derived Normal", "Solid Tissue Normal", "Bone Marrow Normal", "Buccal Cell Normal"))
+    
+    # Creating df with Spearman Rho values from CINmetrics in each cancer
+    spearman.variables <- names(normal.cinmetrics.df)[c(5:10)]
+    all.spearman.df <- normal.cinmetrics.df %>% drop_na %>% split(.$project) %>% map(select, spearman.variables) %>% map(function(x) cor(x, method = "spearman")) %>% map(melt) %>% melt(.) %>% select(-"variable")
+    names(all.spearman.df) <- c("cinmetric1", "cinmetric2", "spearman_rho", "project")
+    
+    # Filtering dataframe to have rows we will use for heatmap to compare Spearman Rhos values from each CINmetric with each other and inserting a column with comparison name to use in heatmap
+    filtered.spearman.df <- filter(all.spearman.df, (cinmetric1 == "base_segments" & cinmetric2 %in% c("break_points", "cna", "fga", "modified_tai", "tai")) | (cinmetric1== "break_points" & cinmetric2 %in% c("cna", "modified_tai", "tai")) | (cinmetric1 == "cna" & cinmetric2 %in% c("modified_tai", "tai")) | (cinmetric1 == "fga" & cinmetric2 %in% c("break_points", "cna", "modified_tai", "tai")) | (cinmetric1 == "modified_tai" & cinmetric2 == "tai")) %>%
+      mutate(comparison = ifelse(cinmetric1 %in%  "base_segments" & cinmetric2 %in% "break_points", "Base Segments vs Break Points", ifelse(cinmetric1 %in% "base_segments" & cinmetric2 %in% "cna", "Base Segments vs CNA", ifelse(cinmetric1 %in% "base_segments" & cinmetric2 %in% "fga", "Base Segments vs FGA", ifelse(cinmetric1 %in% "base_segments" & cinmetric2 %in% "modified_tai", "Base Segments vs Modified TAI", ifelse(cinmetric1 %in% "base_segments" & cinmetric2 %in% "tai", "Base Segments vs TAI", ifelse(cinmetric1 %in% "break_points" & cinmetric2 %in% "cna", "Break Points vs CNA", ifelse(cinmetric1 %in% "break_points" & cinmetric2 %in% "modified_tai", "Break Points vs Modified TAI", ifelse(cinmetric1 %in% "break_points" & cinmetric2 %in% "tai", "Break Points vs TAI", ifelse(cinmetric1 %in% "cna" & cinmetric2 %in% "modified_tai", "CNA vs Modified TAI", ifelse(cinmetric1 %in% "cna" & cinmetric2 %in% "tai", "CNA vs TAI", ifelse(cinmetric1 %in% "fga" & cinmetric2 %in% "break_points", "FGA vs Break Points", ifelse(cinmetric1 %in% "fga" & cinmetric2 %in% "cna", "FGA vs CNA", ifelse(cinmetric1 %in% "fga" & cinmetric2 %in% "modified_tai", "FGA vs Modified TAI", ifelse(cinmetric1 %in% "fga" & cinmetric2 %in% "tai", "FGA vs TAI", ifelse(cinmetric1 %in% "modified_tai" & cinmetric2 %in% "tai", "Modified TAI vs TAI", "NA"))))))))))))))))
+    
+    # Transforming dataframe to use for heatmap
+    transformed.spearman.df <- filtered.spearman.df %>% select(project, comparison, spearman_rho) %>% pivot_wider(names_from = comparison, values_from = spearman_rho)
+    transformed.spearman.df$project <- str_remove(transformed.spearman.df$project, "TCGA-") 
+    transformed.spearman.df <- column_to_rownames(transformed.spearman.df, var = "project") 
+    transposed.spearman.df <- as.data.frame(t(transformed.spearman.df ))
+    
+    # Creating Heatmap
+    heatmap.colors <- colorRamp2(c(-1, 0, 1), c("#FFA319FF","#767676FF","#800000FF"))
+     normal.cancer.heatmap <- Heatmap(transposed.spearman.df,
+                                    width = ncol(transposed.spearman.df)*unit(4, "mm"),
+                                    height = nrow(transposed.spearman.df)*unit(11, "mm"),
+                                    rect_gp = gpar(col = "white", lwd = .5),
+                                    col = heatmap.colors,
+                                    show_column_dend = TRUE,
+                                    show_row_dend = FALSE,
+                                    column_title = "Normal",
+                                    column_title_gp = gpar(fontsize = 10, fontface = "bold"),
+                                    row_names_gp = gpar(fontsize = 7, fontface = "bold"),
+                                    column_names_gp = gpar(fontsize = 7, fontface = "bold"),
+                                    column_names_rot = 45,
+                                    heatmap_legend_param = list(title = "Spearman's Rho", title_gp = gpar(fontsize = 7, fontface = "bold")))
+    return(normal.cancer.heatmap)
+  } 
+  else{
+    stop("Incorrect input for cancer.project. Make sure there are 2 or more cancer projects")
+  }
+}
+
+normal.cancer.heatmap <- get_cinmetrics_cancer_heatmap(all.cinmetrics.df, sample.type = "normal")
+normal.cancer.heatmap
+
+tumor.cancer.heatmap <- get_cinmetrics_cancer_heatmap(all.cinmetrics.df, sample.type = "tumor")
+tumor.cancer.heatmap
+
+```
+
+
+```{r}
+## Combining the two tumor heatmaps and plotting as a panel
+
+#combined.heatmap <- tumor.cinmetrics.heatmap + tumor.cancer.heatmap
+#final.heatmap <- grid.grabExpr(draw(combined.heatmap, column_title = "Spearman correlation between CINmetrics", column_title_gp = gpar(fontface = "bold", fontsize = 14), merge_legend = TRUE))
+
+heatmap1 <- grid.grabExpr(draw(tumor.cinmetrics.heatmap, column_title = "Spearman correlation between CINmetrics", column_title_gp = gpar(fontface = "bold", fontsize = 14), merge_legend = FALSE, show_column_dend = FALSE, show_row_dend = FALSE, heatmap_legend_side="top"))
+heatmap2 <- grid.grabExpr(draw(tumor.cancer.heatmap, column_title = "Spearman correlation between CINmetrics", column_title_gp = gpar(fontface = "bold", fontsize = 14), merge_legend = TRUE, show_column_dend = FALSE, show_row_dend = FALSE))
+
+png(here("fig","CINmetrics_fig1.png"), width = 12, height = 16, units = 'in', res = 350)
+plot_grid(cinmetrics.stripchart, plot_grid(heatmap1, heatmap2), nrow = 2, ncol = 1, align = "hv", axis = "tb", rel_widths = c(1,1),
+          rel_heights = c(1,1), labels = c('A','B'))
+dev.off()
+```
+
+
+```{r}
+sessionInfo() # see output below
+```
+
+```{r}
+# styler
+style_file(here("src",
+                "CINmetrics_analysis.Rmd"))
+
+# lintr
+lint(filename = here("src",
+                     "CINmetrics_analysis.Rmd"))
+```
+
+

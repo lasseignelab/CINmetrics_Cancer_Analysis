@@ -1,0 +1,188 @@
+---
+title: "CINmetrics_analysis_SexBias"
+author: "Tabea M. Soelter"
+date: "3/7/2022"
+output: html_document
+---
+### Analysis of Sex Differences across TCGA cancers
+
+# Load packages
+```{r}
+library(CINmetrics)
+library(tidyverse)
+library(ggpubr)
+library(here)
+library(ComplexHeatmap)
+library(circlize)
+library(reshape2)
+library(rstatix)
+library(cowplot)
+library(PupillometryR)
+library(lintr)
+library(styler)
+library(here)
+```
+
+# Source functions
+```{r}
+source(here("src", "functions_CINmetrics_Cancer_Sex_Analysis.R"))
+```
+
+# Load data processed by S.T.
+```{r}
+# load all_cancer_df
+all_cancer_df <- read.csv(here("data", "processed", "all_cancer_df.csv"))
+```
+
+# Calculate CINmetrics
+* Calculate for all cancers 
+* Include gender metadata and rename it to sex
+* Removing any samples that did not report sex
+```{r}
+# calculate CINmetrics (takes a long time, but can be run locally)
+all_cinmetrics_sex_df <- get_cinmetrics(all_cancer_df)
+
+# check gender column for NAs and remove
+sum(is.na(all_cinmetrics_sex_df$gender)) # 95
+all_cinmetrics_sex_df <- na.omit(all_cinmetrics_sex_df)
+
+# check for samples that did not report gender
+sum(all_cinmetrics_sex_df$gender == "not reported") # 4
+all_cinmetrics_sex_df <- subset(all_cinmetrics_sex_df, gender != "not reported")
+sum(all_cinmetrics_sex_df$gender == "not reported") # 0
+
+# rename gender column to "sex"
+names(all_cinmetrics_sex_df)[names(all_cinmetrics_sex_df) == "gender"] <- "sex"
+```
+
+# Calculate p-values
+* Wilcoxon test on all cancers with respect to sex
+* Bonferroni correction
+```{r}
+# Create list of all cancer projects
+# removed OV, PRAD, UCEC, TGCT, CESC, UCS due to lack of data
+cancer_project <- c("TCGA-GBM",
+                    "TCGA-LUAD",
+                    "TCGA-LUSC",
+                    "TCGA-BLCA",
+                    "TCGA-ESCA",
+                    "TCGA-PAAD",
+                    "TCGA-KIRP",
+                    "TCGA-LIHC",
+                    "TCGA-SARC",
+                    "TCGA-BRCA",
+                    "TCGA-THYM",
+                    "TCGA-MESO",
+                    "TCGA-COAD",
+                    "TCGA-STAD",
+                    "TCGA-SKCM",
+                    "TCGA-CHOL",
+                    "TCGA-KIRC",
+                    "TCGA-THCA",
+                    "TCGA-HNSC",
+                    "TCGA-LAML",
+                    "TCGA-READ",
+                    "TCGA-LGG",
+                    "TCGA-DLBC",
+                    "TCGA-KICH",
+                    "TCGA-ACC",
+                    "TCGA-PCPG",
+                    "TCGA-UVM"
+                    )
+
+# Make list of metrics to include
+metrics <- c("tai",
+             "modified_tai",
+             "cna",
+             "base_segments",
+             "break_points",
+             "fga")
+
+# Perform stats test using Wilcoxon rank
+sex_utest_df <- get_utest_data(all_cinmetrics_sex_df, cancer_project, metrics)
+```
+
+# Bar plot for all cancers
+* Bar plot of -log10 transformed p values of wilcoxon tests between sexes for all cancers
+```{r}
+# plot bar plots
+sex_barplot <- get_utest_graphs()
+sex_barplot
+
+# save bar plots
+ggsave(sex_barplot,
+       filename = here("results",
+                       "cin_sex_barplot_all.pdf"),
+       width = 8.5,
+       height = 11)
+```
+
+# Combined plots
+* Bar plots of top 1-0 most significant cancers
+* Rain cloud plots for the top 1 most significant cancer 
+```{r}
+# generate bar and rain cloud plots
+sex_barplot_raincloud <- get_utest_combined_graphs(sex_utest_df = sex_utest_df,
+                                                   all_cinmetrics_sex_df = all_cinmetrics_sex_df
+                                                   )
+sex_barplot_raincloud
+
+# save plot
+ggsave(sex_barplot_raincloud,
+       filename = here("results",
+                       "cin_sex_bar_raincloud.pdf"),
+       width = 8.5,
+       height = 11)
+```
+
+# Session Info
+```{r}
+sessionInfo() # see output below
+```
+R version 4.1.2 (2021-11-01)
+Platform: x86_64-apple-darwin17.0 (64-bit)
+Running under: macOS Monterey 12.4
+
+Matrix products: default
+LAPACK: /Library/Frameworks/R.framework/Versions/4.1/Resources/lib/libRlapack.dylib
+
+locale:
+[1] en_US.UTF-8/en_US.UTF-8/en_US.UTF-8/C/en_US.UTF-8/en_US.UTF-8
+
+attached base packages:
+[1] grid      stats     graphics  grDevices utils     datasets  methods   base     
+
+other attached packages:
+ [1] ggprism_1.0.3         PupillometryR_0.0.4   rlang_1.0.6           gghalves_0.1.1        cowplot_1.1.1         styler_1.9.1         
+ [7] lintr_3.0.2           rstatix_0.7.0         reshape2_1.4.4        circlize_0.4.15       ComplexHeatmap_2.13.1 here_1.0.1           
+[13] ggpubr_0.4.0          forcats_0.5.1         stringr_1.4.0         dplyr_1.0.9           purrr_0.3.4           readr_2.1.3          
+[19] tidyr_1.2.0           tibble_3.1.7          ggplot2_3.3.6         tidyverse_1.3.1       CINmetrics_0.1.0     
+
+loaded via a namespace (and not attached):
+ [1] colorspace_2.0-3    ggsignif_0.6.3      rjson_0.2.21        ellipsis_0.3.2      rprojroot_2.0.3     GlobalOptions_0.1.2 fs_1.5.2           
+ [8] clue_0.3-61         rstudioapi_0.13     farver_2.1.0        remotes_2.4.2       bit64_4.0.5         fansi_1.0.3         lubridate_1.8.0    
+[15] xml2_1.3.3          codetools_0.2-18    R.methodsS3_1.8.1   doParallel_1.0.17   knitr_1.39          jsonlite_1.8.0      broom_1.0.1        
+[22] cluster_2.1.2       dbplyr_2.1.1        png_0.1-7           R.oo_1.24.0         compiler_4.1.2      httr_1.4.3          backports_1.4.1    
+[29] assertthat_0.2.1    fastmap_1.1.0       lazyeval_0.2.2      cli_3.3.0           htmltools_0.5.2     tools_4.1.2         gtable_0.3.0       
+[36] glue_1.6.2          Rcpp_1.0.8.3        carData_3.0-5       cellranger_1.1.0    vctrs_0.4.1         iterators_1.0.14    xfun_0.31          
+[43] ps_1.7.1            rvest_1.0.2         lifecycle_1.0.1     scales_1.2.0        vroom_1.6.0         hms_1.1.1           rex_1.2.1          
+[50] parallel_4.1.2      RColorBrewer_1.1-3  yaml_2.3.5          gridExtra_2.3       stringi_1.7.6       S4Vectors_0.32.4    desc_1.4.1         
+[57] foreach_1.5.2       BiocGenerics_0.40.0 cyclocomp_1.1.0     shape_1.4.6         pkgconfig_2.0.3     matrixStats_0.62.0  evaluate_0.15      
+[64] labeling_0.4.2      bit_4.0.4           tidyselect_1.1.2    processx_3.6.1      ggsci_2.9           plyr_1.8.7          magrittr_2.0.3     
+[71] R6_2.5.1            IRanges_2.28.0      generics_0.1.2      DBI_1.1.2           pillar_1.7.0        haven_2.4.3         withr_2.5.0        
+[78] abind_1.4-5         modelr_0.1.8        crayon_1.5.1        car_3.1-0           utf8_1.2.2          tzdb_0.3.0          rmarkdown_2.11     
+[85] GetoptLong_1.0.5    readxl_1.3.1        callr_3.7.0         reprex_2.0.1        digest_0.6.29       R.cache_0.16.0      R.utils_2.11.0     
+[92] stats4_4.1.2        munsell_0.5.0
+
+# Reproducibility
+```{r}
+# styler
+style_file(here("src",
+                "CINmetrics_analysis_sex.Rmd"))
+
+# lintr
+lint(filename = here("src",
+                     "CINmetrics_analysis_sex.Rmd"))
+```
+
+

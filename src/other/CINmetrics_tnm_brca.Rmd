@@ -1,0 +1,185 @@
+---
+title: "CINmetrics_tnm_brca"
+output: html_document
+date: "2023-05-05"
+---
+
+
+```{r}
+# This function takes CINmetrics values and does a log10 transformation from the all.tnm.df and creates a strip chart categorized by tumor stage. 
+
+#NOTE: I am still getting an error on this, so this particular code is not functional yet. There is hard code in the R chunk below of the figure I created. I am having trouble at the '# Calculating u-test data for specific cancer and metric to prepare for violin plot' part of this particular chunk. This is the error: Error in `[.data.frame`(tumor.stage.df, , j) : undefined columns selected. This error is occurring because the get_utest_data is unable to recognize the log10 column created within this function.
+
+get_tumorstage_violinplot <- function(all.tnm.df, cancer.project, metric){
+  # Subsetting by specific cancer
+  cancer.tumor.stage.df <- filter(all.tnm.df, project == cancer.project) %>% filter(!(ajcc_pathologic_t %in% c("TX", "Tis", "T0")) & sample_type %in% c("Metastatic", "Primary Blood Derived Cancer", "Primary Tumor", "Recurrent Tumor", "Additional - New Primary", "Primary Blood Derived Cancer - Peripheral Blood")) %>% drop_na(ajcc_pathologic_t)
+  
+  # log10 transformation of CINmetric of your choice
+  cancer.tumor.stage.df$log10metric <- cancer.tumor.stage.df %>% dplyr::select(metric) %>% log10()
+
+  # Filtering subtumor stages to be under main tumor stage
+  cancer.tumor.stage.df$ajcc_pathologic_t <- ifelse(cancer.tumor.stage.df$ajcc_pathologic_t %in% c("T1a", "T1a1", "T1b", "T1b2", "T1b1", "T1c"), "T1", ifelse(cancer.tumor.stage.df$ajcc_pathologic_t %in% c("T2a", "T2b", "T2c", "T2a2", "T2a1", "T2a2"), "T2", ifelse(cancer.tumor.stage.df$ajcc_pathologic_t %in% c("T3a", "T3b", "T3c"), "T3", ifelse(cancer.tumor.stage.df$ajcc_pathologic_t %in% c("T4a", "T4b", "T4c", "T4d", "T4e"), "T4", cancer.tumor.stage.df$ajcc_pathologic_t))))
+  
+  # Calculating u-test data for specific cancer and metric to prepare for violin plot
+  cancer.tumor.stage.utest.df <- get_utest_data(cancer.tumor.stage.df, cancer.project = cancer.project, tnm.category = "tumor.stage", metrics = paste("log10metric", metric, sep = "."), file.name = paste(cancer.project, paste(metric, "tumor_stage_utest_df.csv", sep = "_"), sep = "_"))
+  cancer.tumor.stage.df$ajcc_pathologic_t <- factor(filtered.brca.tumor.stage.df$ajcc_pathologic_t, levels = c("T1", "T2", "T3", "T4"))
+  cancer.metric.utest.df <- cancer.tumor.stage.utest.df %>% dplyr::select(group1, group2, p) 
+  
+  # Adding asterisks to u-test results for figure 
+cancer.metric.utest.df$p.signif <- ifelse(cancer.metric.utest.df$p <= 0.0001, paste(cancer.metric.utest.df$p,"****", sep = ""), ifelse(cancer.metric.utest.df$p <= 0.001, paste(cancer.metric.utest.df$p, "***", sep = ""), ifelse(cancer.metric.utest.df$p <= 0.01, paste(cancer.metric.utest.df$p, "**", sep = ""), ifelse(cancer.metric.utest.df$p <= 0.05, paste(cancer.metric.utest.df$p, "*",sep = ""), paste(cancer.metric.utest.df$p,"(Not Significant)", sep = " ")))))
+
+  # Creating Violin Plot based on Tumor Stages 
+  cancer.metric.violinplot <- ggviolin(cancer.metric.utest.df,
+                                      x = "ajcc_pathologic_t", 
+                                      y = paste("log10", metric, sep = ""),
+                                      fill = "ajcc_pathologic_t", 
+                                      color = "ajcc_pathologic_t", 
+                                      palette = "simpsons", 
+                                      size = .5, 
+                                      xlab = cancer.project, 
+                                      ylab = paste("log10", metric, sep = ""),
+                                      alpha = .3, 
+                                      title = paste(metric, "by tumor stage", sep = ""),
+                                      font.main = c(11, "bold"),
+                                      font.x = c(10, "bold"),
+                                      font.y = c(10, "bold"),
+                                      font.xtickslab = c(10, "bold"),
+                                      font.ytickslab = c(7, "bold"),
+                                      add = c("boxplot", "jitter"), add.params = list(size = .3, alpha = .5, fill = "white"),
+                                      ) + stat_pvalue_manual(read.tumor.stage.break.points.utest.df,
+                                                             y.position = 10,
+                                                             step.increase = 0.1,
+                                                             label = "p.signif")
+  return(cancer.metric.violinplot)
+}
+
+ # Testing the function to create violin plot in breast cancer for base segments metric
+brca.base.segments.violin.plot <- get_tumorstage_violinplot(all.tnm.df, cancer.project = "TCGA-BRCA", metric = "base_segments")
+
+```
+
+
+
+```{r}
+# Takes the dataframe with the p.values from the U-test results and creates a violin plot to show the different CINmetric values based on tumor stage with significance shown. NOTE: This is the hard code I created and what I used to create the function above. 
+
+## Comparing the p-values between each tumor stage in BRCA Base Segments and READ Break Points
+# Creating figure for BRCA Base Segments
+
+# Filtering all.tnm.df to only have breast cancer and remove samples that do not have the tumor stage data we are using
+brca.tumor.stage.df <- filter(all.tnm.df, project == "TCGA-BRCA") %>% filter(!(ajcc_pathologic_t %in% c("TX", "Tis", "T0")) & sample_type %in% c("Metastatic", "Primary Blood Derived Cancer", "Primary Tumor", "Recurrent Tumor", "Additional - New Primary", "Primary Blood Derived Cancer - Peripheral Blood")) %>% drop_na(ajcc_pathologic_t)
+
+# Log10 transformation of Base Segments Values for graphing purposes
+brca.tumor.stage.df$log10base_segments <- log10(brca.tumor.stage.df$base_segments)
+
+# Filtering to have only values more that 8 (per Vishal's request) and to categorize tumor stages by main stages
+filtered.brca.tumor.stage.df <- dplyr::filter(brca.tumor.stage.df, log10base_segments >= 8)
+filtered.brca.tumor.stage.df $ajcc_pathologic_t <- ifelse(filtered.brca.tumor.stage.df$ajcc_pathologic_t %in% c("T1a", "T1a1", "T1b", "T1b2", "T1b1", "T1c"), "T1", ifelse(filtered.brca.tumor.stage.df$ajcc_pathologic_t %in% c("T2a", "T2b", "T2c", "T2a2", "T2a1", "T2a2"), "T2", ifelse(filtered.brca.tumor.stage.df$ajcc_pathologic_t %in% c("T3a", "T3b", "T3c"), "T3", ifelse(filtered.brca.tumor.stage.df$ajcc_pathologic_t %in% c("T4a", "T4b", "T4c", "T4d", "T4e"), "T4", filtered.brca.tumor.stage.df$ajcc_pathologic_t))))
+
+# Obtaining u-test p-values based on transformation and filtering for Violin Plot 
+metrics <- c("tai", "modified_tai", "cna","base_segments", "break_points", "fga", "log10base_segments")
+brca.tumor.stage.utest.df <- get_utest_data(filtered.brca.tumor.stage.df, cancer.project = "TCGA-BRCA", tnm.category = "tumor.stage", metrics)
+filtered.brca.tumor.stage.df$ajcc_pathologic_t <- factor(filtered.brca.tumor.stage.df$ajcc_pathologic_t, levels = c("T1", "T2", "T3", "T4"))
+brca.tumor.stage.base.segments.utest.df <- dplyr::filter(brca.tumor.stage.utest.df , (project == "TCGA-BRCA" & cin == "log10base_segments")) %>% select(group1, group2, p) 
+
+# Creating a column in utest df for the asterisks based on p-value significance for Violin Plot figure 
+brca.tumor.stage.base.segments.utest.df$p.signif <- ifelse(brca.tumor.stage.base.segments.utest.df$p <= 0.0001, paste(brca.tumor.stage.base.segments.utest.df$p,"****", sep = ""), ifelse(brca.tumor.stage.base.segments.utest.df$p <= 0.001, paste(brca.tumor.stage.base.segments.utest.df$p, "***", sep = ""), ifelse(brca.tumor.stage.base.segments.utest.df$p <= 0.01, paste(brca.tumor.stage.base.segments.utest.df$p, "**", sep = ""), ifelse(brca.tumor.stage.base.segments.utest.df$p <= 0.05, paste(brca.tumor.stage.base.segments.utest.df$p, "*",sep = ""), paste(brca.tumor.stage.base.segments.utest.df$p,"(Not Significant)", sep = " ")))))
+
+# Creating Violin Plot
+brca.base.segments.violin.plot <- ggviolin(filtered.brca.tumor.stage.df,
+                                      x = "ajcc_pathologic_t", 
+                                      y = "log10base_segments", 
+                                      fill = "ajcc_pathologic_t", 
+                                      color = "ajcc_pathologic_t", 
+                                      palette = "simpsons", 
+                                      size = .5, 
+                                      xlab = "TCGA-BRCA", 
+                                      ylab = "log10(Base Segments)",
+                                      
+
+
+                                      #yscale = "log10",
+                                      #format.scale = TRUE,
+                                      #position = position_jitterdodge(jitter.width = .7, jitter.height = .5, dodge.width = 0), 
+                                      #rotate = FALSE,
+                                      alpha = .3, 
+                                      #p.adjust.method = "none",
+                                      #combine = TRUE,
+                                      title = "Base Segments Categorized by Tumor Stage (Filtered >8 log10(base_segments)",
+                                      font.main = c(11, "bold"),
+                                      font.x = c(10, "bold"),
+                                      font.y = c(10, "bold"),
+                                      font.xtickslab = c(10, "bold"),
+                                      font.ytickslab = c(7, "bold"),
+                                      #legend.title = "Tumor Stage",
+                                      #font.legend = c(10, "bold"), 
+                                      add = c("boxplot", "jitter"), add.params = list(size = .3, alpha = .5, fill = "white"),
+                                      #add = "mean_sd", add.params = list(size = .5, alpha = 1, group = "ajcc_pathologic_t", color = "black")
+                                      ) + stat_pvalue_manual(brca.tumor.stage.base.segments.utest.df,
+                                                             y.position = 10,
+                                                             step.increase = 0.1,
+                                                             label = "p.signif")
+brca.base.segments.violin.plot
+
+# Repeating Violin Plot hard code for READ in break points 
+
+# Filtering all.tnm.df to only have breast cancer and remove samples that do not have the tumor stage data we are using
+filtered.read.tumor.stage.df <- filter(all.tnm.df, project == "TCGA-READ") %>% filter(!(ajcc_pathologic_t %in% c("TX", "Tis", "T0")) & sample_type %in% c("Metastatic", "Primary Blood Derived Cancer", "Primary Tumor", "Recurrent Tumor", "Additional - New Primary", "Primary Blood Derived Cancer - Peripheral Blood")) %>% drop_na(ajcc_pathologic_t)
+
+# Log10 transformation of Break Points Values for graphing purposes
+filtered.read.tumor.stage.df$log10break_points <- log10(filtered.read.tumor.stage.df$break_points)
+
+# Categorizing tumor stages by main stages
+filtered.read.tumor.stage.df $ajcc_pathologic_t <- ifelse(filtered.read.tumor.stage.df $ajcc_pathologic_t %in% c("T1a", "T1a1", "T1b", "T1b2", "T1b1", "T1c"), "T1", ifelse(filtered.read.tumor.stage.df $ajcc_pathologic_t %in% c("T2a", "T2b", "T2c", "T2a2", "T2a1", "T2a2"), "T2", ifelse(filtered.read.tumor.stage.df $ajcc_pathologic_t %in% c("T3a", "T3b", "T3c"), "T3", ifelse(filtered.read.tumor.stage.df $ajcc_pathologic_t %in% c("T4a", "T4b", "T4c", "T4d", "T4e"), "T4", filtered.read.tumor.stage.df$ajcc_pathologic_t))))
+
+
+# Obtaining u-test p-values based on transformation and filtering for Violin Plot 
+metrics <- c("tai", "modified_tai", "cna","base_segments", "break_points", "fga", "log10break_points")
+read.tumor.stage.utest.df <- get_utest_data(filtered.read.tumor.stage.df, cancer.project = "TCGA-READ", tnm.category = "tumor.stage", metrics)
+filtered.read.tumor.stage.df$ajcc_pathologic_t <- factor(filtered.read.tumor.stage.df$ajcc_pathologic_t, levels = c("T1", "T2", "T3", "T4"))
+read.tumor.stage.break.points.utest.df <- dplyr::filter(read.tumor.stage.utest.df , (project == "TCGA-READ" & cin == "log10break_points")) %>% select(group1, group2, p) 
+
+# Creating a column in utest df for the asterisks based on p-value significance for Violin Plot figure 
+read.tumor.stage.break.points.utest.df$p.signif <- ifelse(read.tumor.stage.break.points.utest.df$p <= 0.0001, paste(read.tumor.stage.break.points.utest.df$p,"****", sep = ""), ifelse(read.tumor.stage.break.points.utest.df$p <= 0.001, paste(read.tumor.stage.break.points.utest.df$p, "***", sep = ""), ifelse(read.tumor.stage.break.points.utest.df$p <= 0.01, paste(read.tumor.stage.break.points.utest.df$p, "**", sep = ""), ifelse(read.tumor.stage.break.points.utest.df$p <= 0.05, paste(read.tumor.stage.break.points.utest.df$p, "*",sep = ""), paste(read.tumor.stage.break.points.utest.df$p,"(Not Significant)", sep = " ")))))
+
+# Creating Violin Plot
+read.break.points.violin.plot <- ggviolin(filtered.read.tumor.stage.df,
+                                      x = "ajcc_pathologic_t", 
+                                      y = "log10break_points", 
+                                      fill = "ajcc_pathologic_t", 
+                                      color = "ajcc_pathologic_t", 
+                                      palette = "simpsons", 
+                                      size = .5, 
+                                      xlab = "TCGA-READ", 
+                                      ylab = "log10(Break Points)",
+                                      
+
+
+                                      #yscale = "log10",
+                                      #format.scale = TRUE,
+                                      #position = position_jitterdodge(jitter.width = .7, jitter.height = .5, dodge.width = 0), 
+                                      #rotate = FALSE,
+                                      alpha = .3, 
+                                      #p.adjust.method = "none",
+                                      #combine = TRUE,
+                                      title = "Break Points Categorized by Tumor Stage",
+                                      font.main = c(11, "bold"),
+                                      font.x = c(10, "bold"),
+                                      font.y = c(10, "bold"),
+                                      font.xtickslab = c(10, "bold"),
+                                      font.ytickslab = c(7, "bold"),
+                                      #legend.title = "Tumor Stage",
+                                      #font.legend = c(10, "bold"), 
+                                      add = c("boxplot", "jitter"), add.params = list(size = .3, alpha = .5, fill = "white"),
+                                      #add = "mean_sd", add.params = list(size = .5, alpha = 1, group = "ajcc_pathologic_t", color = "black")
+                                      ) + stat_pvalue_manual(read.tumor.stage.break.points.utest.df,
+                                                             y.position = 10,
+                                                             step.increase = 0.1,
+                                                             label = "p.signif")
+read.break.points.violin.plot
+
+
+
+
+
+```
