@@ -1,6 +1,6 @@
 <img src="https://www.lasseigne.org/img/main/lablogo.png" width="250" height="250">
 
-# Numerical and structural chromosomal instability metrics across human cancer
+# Numerical and structural chromosomal instability metrics across human cancer <a href="https://zenodo.org/badge/latestdoi/398044869"><img src="https://zenodo.org/badge/398044869.svg" alt="DOI"></a>
 
 Here we compare six CINmetrics capturing copy number aberrations as a measure of chromosomal instability, as either numerical alterations, structural alterations, or a combination of the two across 33 cancer data sets from The Cancer Genome Atlas. 
 
